@@ -1430,6 +1430,53 @@ body {
 }
 
 /* =============== MODULE CREATOR =============== */
+.creator-open-btn {
+  border-style: dashed !important;
+}
+
+.creator-open-btn:hover {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+
+.modal-creator {
+  max-width: 480px;
+}
+
+.modal-creator-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-creator-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.modal-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0.25rem 0.4rem;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition);
+}
+
+.modal-close-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-input);
+}
+
+.creator-content {
+  /* Content inside modal, no extra padding needed */
+}
+
 .creator-section {
   border-top: 1px solid var(--border);
 }

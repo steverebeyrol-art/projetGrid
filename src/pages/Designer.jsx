@@ -15,6 +15,7 @@ export default function Designer() {
   const [catalogModule, setCatalogModule] = useState(null)
   const [leftCollapsed, setLeftCollapsed] = useState(false)
   const [rightCollapsed, setRightCollapsed] = useState(false)
+  const [showCreator, setShowCreator] = useState(false)
   const sceneRef = useRef(null)
   const { user, refreshUser } = useAuth()
 
@@ -116,7 +117,22 @@ export default function Designer() {
               activeModule={catalogModule}
               onSelectModule={setCatalogModule}
             />
-            <ModuleCreator />
+            <div className="panel-section">
+              <button className="btn btn-secondary btn-block creator-open-btn" onClick={() => setShowCreator(true)}>
+                ✨ Créer un module sur mesure
+              </button>
+            </div>
+            {showCreator && (
+              <div className="modal-overlay" onClick={() => setShowCreator(false)}>
+                <div className="modal-card modal-creator" onClick={e => e.stopPropagation()}>
+                  <div className="modal-creator-header">
+                    <h3>✨ Créer un module sur mesure</h3>
+                    <button className="modal-close-btn" onClick={() => setShowCreator(false)}>✕</button>
+                  </div>
+                  <ModuleCreator onClose={() => setShowCreator(false)} />
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

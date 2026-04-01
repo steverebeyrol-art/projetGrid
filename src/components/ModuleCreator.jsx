@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 
-export default function ModuleCreator() {
+export default function ModuleCreator({ onClose }) {
   const [step, setStep] = useState(0) // 0: intro, 1: upload photos, 2: configure, 3: done
   const [photos, setPhotos] = useState([])
   const [config, setConfig] = useState({ name: '', w: 1, d: 1, h: 1, padding: 1 })
@@ -25,15 +25,11 @@ export default function ModuleCreator() {
   }
 
   const handleGenerate = () => {
-    // In production: send photos to backend AI for shape detection
-    // For now, simulate the flow
     setStep(3)
   }
 
   return (
-    <div className="panel-section creator-section">
-      <h3 className="panel-title">✨ Créer un module sur mesure</h3>
-
+    <div className="creator-content">
       {step === 0 && (
         <div className="creator-intro">
           <p className="creator-desc">
@@ -157,9 +153,16 @@ export default function ModuleCreator() {
           <p className="creator-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
             En production, l'IA analysera vos photos pour créer automatiquement la forme 3D de l'objet dans le module.
           </p>
-          <button className="btn btn-primary btn-block" onClick={() => { setStep(0); setPhotos([]); setConfig({ name: '', w: 1, d: 1, h: 1, padding: 1 }) }}>
-            Créer un autre module
-          </button>
+          <div className="creator-done-actions">
+            <button className="btn btn-primary btn-block" onClick={() => { setStep(0); setPhotos([]); setConfig({ name: '', w: 1, d: 1, h: 1, padding: 1 }) }}>
+              Créer un autre module
+            </button>
+            {onClose && (
+              <button className="btn btn-secondary btn-block" onClick={onClose} style={{ marginTop: '0.5rem' }}>
+                Fermer
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
