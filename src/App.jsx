@@ -1,12 +1,18 @@
 import { Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
-import Editor from './pages/Editor'
+import Designer from './pages/Designer'
+import Pricing from './pages/Pricing'
+import Navbar from './components/Navbar'
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/editor/:type" element={<Editor />} />
-    </Routes>
+    <>
+      <Navbar />
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/designer" element={<Designer />} />
+        <Route path="/pricing" element={<Pricing />} />
+      </Routes>
+    </>
   )
 }
