@@ -5,7 +5,8 @@ export default function Navbar() {
     <nav className="navbar">
       <Link to="/" className="nav-logo">
         <span className="logo-icon">⬡</span>
-        <span className="logo-text">GridModular</span>
+        <span className="logo-text">MODO</span>
+        <span className="logo-sub">by OMMEdesign</span>
       </Link>
       <div className="nav-links">
         <Link to="/designer" className="nav-link">Designer</Link>

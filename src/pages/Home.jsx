@@ -152,7 +152,7 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="footer">
-        <p>© 2026 GridModular. Tous droits réservés.</p>
+        <p>© 2026 MODO by OMMEdesign. Tous droits réservés.</p>
       </footer>
     </div>
   )
