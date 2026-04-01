@@ -1,18 +1,24 @@
 import { useState, useRef, useCallback } from 'react'
 import ModuleCatalog from '../components/ModuleCatalog'
+import ModuleCreator from '../components/ModuleCreator'
 import DesignerViewport from '../components/DesignerViewport'
 import PropertiesPanel from '../components/PropertiesPanel'
 import GridConfig from '../components/GridConfig'
 import { downloadSTL } from '../utils/stlExporter'
+import { addFabrication, addDownload, canDownload } from '../utils/auth'
+import { useAuth } from '../components/AuthContext'
 
 export default function Designer() {
   const [gridSize, setGridSize] = useState({ x: 4, y: 4 })
   const [placedModules, setPlacedModules] = useState([])
   const [selectedId, setSelectedId] = useState(null)
-  const [draggedModule, setDraggedModule] = useState(null)
+  const [catalogModule, setCatalogModule] = useState(null)
+  const [leftCollapsed, setLeftCollapsed] = useState(false)
+  const [rightCollapsed, setRightCollapsed] = useState(false)
   const sceneRef = useRef(null)
+  const { user, refreshUser } = useAuth()
 
-  const handleDropModule = useCallback((moduleData, gridX, gridY) => {
+  const handlePlaceModule = useCallback((moduleData, gridX, gridY) => {
     const newModule = {
       id: Date.now() + Math.random(),
       moduleId: moduleData.id,
@@ -44,8 +50,6 @@ export default function Designer() {
     setPlacedModules(prev => prev.map(m => {
       if (m.id !== id) return m
       const newRotation = (m.rotation + 90) % 360
-      // Swap w and d on rotation
-      const swapped = newRotation % 180 !== (m.rotation - 90 + 360) % 180
       return { ...m, rotation: newRotation, w: m.d, d: m.w }
     }))
   }, [])
@@ -74,8 +78,25 @@ export default function Designer() {
   }, [])
 
   const handleExport = () => {
+    if (!user) {
+      alert('Connectez-vous pour exporter vos modèles.')
+      return
+    }
+    if (!canDownload()) {
+      alert('Vous avez atteint la limite de téléchargements. Passez à un forfait supérieur.')
+      return
+    }
     if (sceneRef.current) {
-      downloadSTL(sceneRef.current, 'gridmodular-design.stl')
+      const filename = 'modo-design.stl'
+      downloadSTL(sceneRef.current, filename)
+      addDownload(filename)
+      addFabrication({
+        name: `Config ${new Date().toLocaleDateString('fr-FR')}`,
+        gridSize: gridSize,
+        moduleCount: placedModules.length,
+        modules: placedModules.map(m => ({ name: m.name, gridX: m.gridX, gridY: m.gridY })),
+      })
+      refreshUser()
     }
   }
 
@@ -83,13 +104,21 @@ export default function Designer() {
 
   return (
     <div className="designer">
-      {/* Left panel - Module catalog */}
-      <div className="designer-left">
-        <GridConfig gridSize={gridSize} setGridSize={setGridSize} />
-        <ModuleCatalog
-          onDragStart={setDraggedModule}
-          onDragEnd={() => setDraggedModule(null)}
-        />
+      {/* Left panel */}
+      <div className={`designer-left ${leftCollapsed ? 'collapsed' : ''}`}>
+        <button className="panel-collapse-btn" onClick={() => setLeftCollapsed(!leftCollapsed)} title={leftCollapsed ? 'Ouvrir' : 'Réduire'}>
+          {leftCollapsed ? '▶' : '◀'}
+        </button>
+        {!leftCollapsed && (
+          <>
+            <GridConfig gridSize={gridSize} setGridSize={setGridSize} />
+            <ModuleCatalog
+              activeModule={catalogModule}
+              onSelectModule={setCatalogModule}
+            />
+            <ModuleCreator />
+          </>
+        )}
       </div>
 
       {/* Center - 3D Viewport */}
@@ -99,9 +128,9 @@ export default function Designer() {
           placedModules={placedModules}
           selectedId={selectedId}
           onSelectModule={handleSelectModule}
-          onDropModule={handleDropModule}
+          onPlaceModule={handlePlaceModule}
           onMoveModule={handleMoveModule}
-          draggedModule={draggedModule}
+          catalogModule={catalogModule}
           sceneRef={sceneRef}
         />
         <div className="viewport-toolbar">
@@ -110,21 +139,29 @@ export default function Designer() {
           </button>
         </div>
         <div className="viewport-info">
-          LMB: Rotation &nbsp;|&nbsp; RMB: Translation &nbsp;|&nbsp; Molette: Zoom &nbsp;|&nbsp; Clic: Sélectionner
+          {catalogModule
+            ? `Mode placement : ${catalogModule.name} — Cliquez sur la grille pour placer, Echap pour annuler`
+            : 'Clic gauche: Rotation | Clic droit: Translation | Molette: Zoom | Clic sur module: Sélectionner/Déplacer'
+          }
         </div>
       </div>
 
-      {/* Right panel - Properties */}
-      <div className="designer-right">
-        <PropertiesPanel
-          module={selectedModule}
-          gridSize={gridSize}
-          onRotate={handleRotateModule}
-          onDelete={handleDeleteModule}
-          onDuplicate={handleDuplicateModule}
-          onUpdate={handleUpdateModule}
-          placedModules={placedModules}
-        />
+      {/* Right panel */}
+      <div className={`designer-right ${rightCollapsed ? 'collapsed' : ''}`}>
+        <button className="panel-collapse-btn right" onClick={() => setRightCollapsed(!rightCollapsed)} title={rightCollapsed ? 'Ouvrir' : 'Réduire'}>
+          {rightCollapsed ? '◀' : '▶'}
+        </button>
+        {!rightCollapsed && (
+          <PropertiesPanel
+            module={selectedModule}
+            gridSize={gridSize}
+            onRotate={handleRotateModule}
+            onDelete={handleDeleteModule}
+            onDuplicate={handleDuplicateModule}
+            onUpdate={handleUpdateModule}
+            placedModules={placedModules}
+          />
+        )}
       </div>
     </div>
   )

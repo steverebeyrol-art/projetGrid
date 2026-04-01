@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { CATEGORIES } from '../data/modules'
 
-export default function ModuleCatalog({ onDragStart, onDragEnd }) {
+export default function ModuleCatalog({ activeModule, onSelectModule }) {
   const [openCategory, setOpenCategory] = useState(CATEGORIES[0].id)
   const [search, setSearch] = useState('')
 
@@ -16,6 +16,7 @@ export default function ModuleCatalog({ onDragStart, onDragEnd }) {
   return (
     <div className="panel-section catalog-section">
       <h3 className="panel-title">🧩 Modules</h3>
+      <p className="panel-hint">Cliquez sur un module puis cliquez sur la grille pour le placer.</p>
 
       <input
         type="text"
@@ -41,13 +42,8 @@ export default function ModuleCatalog({ onDragStart, onDragEnd }) {
                 {cat.modules.map(mod => (
                   <div
                     key={mod.id}
-                    className="module-card"
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('application/json', JSON.stringify(mod))
-                      onDragStart(mod)
-                    }}
-                    onDragEnd={onDragEnd}
+                    className={`module-card ${activeModule?.id === mod.id ? 'active' : ''}`}
+                    onClick={() => onSelectModule(activeModule?.id === mod.id ? null : mod)}
                   >
                     <div className="module-card-icon" style={{ background: mod.color }}>
                       {mod.icon}
@@ -63,6 +59,17 @@ export default function ModuleCatalog({ onDragStart, onDragEnd }) {
           </div>
         ))}
       </div>
+
+      {activeModule && (
+        <div className="catalog-active">
+          <div className="catalog-active-inner">
+            <span className="catalog-active-icon" style={{ background: activeModule.color }}>{activeModule.icon}</span>
+            <span className="catalog-active-name">{activeModule.name}</span>
+            <button className="catalog-active-cancel" onClick={() => onSelectModule(null)}>✕</button>
+          </div>
+          <p className="catalog-active-hint">Cliquez sur la grille pour placer le module</p>
+        </div>
+      )}
     </div>
   )
 }
