@@ -7,6 +7,26 @@ import { GRID_UNIT, GRID_HEIGHT_UNIT, BASE_HEIGHT } from '../data/modules'
 const SCALE = 0.01 // 1mm = 0.01 three.js units
 const CELL = GRID_UNIT * SCALE
 
+// Check if a module placement overlaps with any existing module
+function isCellAvailable(gridX, gridY, w, d, gridSize, placedModules, excludeId = null) {
+  // Out of bounds check
+  if (gridX < 0 || gridY < 0 || gridX + w > gridSize.x || gridY + d > gridSize.y) return false
+
+  for (const m of placedModules) {
+    if (m.id === excludeId) continue
+    // AABB overlap check
+    if (
+      gridX < m.gridX + m.w &&
+      gridX + w > m.gridX &&
+      gridY < m.gridY + m.d &&
+      gridY + d > m.gridY
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
 function BaseGrid({ gridSize }) {
   const w = gridSize.x * CELL
   const d = gridSize.y * CELL
@@ -94,7 +114,7 @@ function PlacedModule({ module, isSelected, onPointerDown }) {
 }
 
 // Ghost preview of module being placed
-function GhostModule({ moduleData, gridPos, gridSize }) {
+function GhostModule({ moduleData, gridPos, gridSize, placedModules, excludeId }) {
   if (!moduleData || !gridPos) return null
 
   const gx = Math.max(0, Math.min(gridSize.x - moduleData.w, gridPos.x))
@@ -103,11 +123,16 @@ function GhostModule({ moduleData, gridPos, gridSize }) {
   const d = moduleData.d * CELL
   const h = moduleData.h * GRID_HEIGHT_UNIT * SCALE
   const baseH = BASE_HEIGHT * SCALE
+  const available = isCellAvailable(gx, gy, moduleData.w, moduleData.d, gridSize, placedModules, excludeId)
 
   return (
     <mesh position={[gx * CELL + w / 2, baseH + h / 2, gy * CELL + d / 2]}>
       <boxGeometry args={[w - 0.005, h, d - 0.005]} />
-      <meshStandardMaterial color={moduleData.color} transparent opacity={0.4} wireframe={false} />
+      <meshStandardMaterial
+        color={available ? moduleData.color : '#ef4444'}
+        transparent
+        opacity={available ? 0.4 : 0.6}
+      />
     </mesh>
   )
 }
@@ -184,6 +209,7 @@ function Scene({ gridSize, placedModules, selectedId, onSelectModule, onPlaceMod
 
   const [ghostPos, setGhostPos] = useState(null)
   const [dragging, setDragging] = useState(null) // { id, offsetX, offsetY }
+  const [dragGhostPos, setDragGhostPos] = useState(null)
   const orbitRef = useRef()
 
   const handleModulePointerDown = useCallback((e, id) => {
@@ -210,12 +236,15 @@ function Scene({ gridSize, placedModules, selectedId, onSelectModule, onPlaceMod
 
   const handleGridClick = useCallback((pos) => {
     if (dragging) {
-      // Finish moving
+      // Finish moving — only if target is available
       const mod = placedModules.find(m => m.id === dragging.id)
       if (mod) {
         const newX = Math.max(0, Math.min(gridSize.x - mod.w, pos.x - dragging.offsetX))
         const newY = Math.max(0, Math.min(gridSize.y - mod.d, pos.y - dragging.offsetY))
-        onMoveModule(dragging.id, newX, newY)
+        if (isCellAvailable(newX, newY, mod.w, mod.d, gridSize, placedModules, dragging.id)) {
+          onMoveModule(dragging.id, newX, newY)
+        }
+        // If not available, module stays at its original position
       }
       setDragging(null)
       if (orbitRef.current) orbitRef.current.enabled = true
@@ -223,10 +252,12 @@ function Scene({ gridSize, placedModules, selectedId, onSelectModule, onPlaceMod
     }
 
     if (catalogModule) {
-      // Place new module from catalog
+      // Place new module from catalog — only if target is available
       const gx = Math.max(0, Math.min(gridSize.x - catalogModule.w, pos.x))
       const gy = Math.max(0, Math.min(gridSize.y - catalogModule.d, pos.y))
-      onPlaceModule(catalogModule, gx, gy)
+      if (isCellAvailable(gx, gy, catalogModule.w, catalogModule.d, gridSize, placedModules)) {
+        onPlaceModule(catalogModule, gx, gy)
+      }
       return
     }
 
@@ -240,7 +271,11 @@ function Scene({ gridSize, placedModules, selectedId, onSelectModule, onPlaceMod
       if (mod) {
         const newX = Math.max(0, Math.min(gridSize.x - mod.w, pos.x - dragging.offsetX))
         const newY = Math.max(0, Math.min(gridSize.y - mod.d, pos.y - dragging.offsetY))
-        onMoveModule(dragging.id, newX, newY)
+        setDragGhostPos({ x: newX, y: newY })
+        // Only move the actual module if the position is available
+        if (isCellAvailable(newX, newY, mod.w, mod.d, gridSize, placedModules, dragging.id)) {
+          onMoveModule(dragging.id, newX, newY)
+        }
       }
       return
     }
@@ -257,6 +292,7 @@ function Scene({ gridSize, placedModules, selectedId, onSelectModule, onPlaceMod
     const handlePointerUp = () => {
       if (dragging) {
         setDragging(null)
+        setDragGhostPos(null)
         if (orbitRef.current) orbitRef.current.enabled = true
       }
     }
@@ -293,8 +329,22 @@ function Scene({ gridSize, placedModules, selectedId, onSelectModule, onPlaceMod
           moduleData={catalogModule}
           gridPos={ghostPos}
           gridSize={gridSize}
+          placedModules={placedModules}
         />
       )}
+
+      {dragging && dragGhostPos && (() => {
+        const mod = placedModules.find(m => m.id === dragging.id)
+        return mod ? (
+          <GhostModule
+            moduleData={mod}
+            gridPos={dragGhostPos}
+            gridSize={gridSize}
+            placedModules={placedModules}
+            excludeId={dragging.id}
+          />
+        ) : null
+      })()}
 
       <Grid
         args={[20, 20]}
