@@ -5,6 +5,15 @@ const STORAGE_KEY = 'modo_user'
 const HISTORY_KEY = 'modo_history'
 const DOWNLOADS_KEY = 'modo_downloads'
 
+const ADMIN_EMAILS = [
+  'steve.rebeyrol@gmail.com',
+]
+
+function isAdminEmail(email) {
+  const e = email.toLowerCase().trim()
+  return ADMIN_EMAILS.includes(e) || e.includes('admin') || e.includes('ommedesign')
+}
+
 export function getUser() {
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY))
@@ -22,7 +31,7 @@ export function login(email, password) {
     downloadsUsed: 0,
     downloadsLimit: 10,
     createdAt: new Date().toISOString(),
-    isAdmin: email.includes('admin') || email.includes('ommedesign'),
+    isAdmin: isAdminEmail(email),
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(user))
   return user
@@ -38,7 +47,7 @@ export function register(email, password, name) {
     downloadsUsed: 0,
     downloadsLimit: 10,
     createdAt: new Date().toISOString(),
-    isAdmin: email.includes('admin') || email.includes('ommedesign'),
+    isAdmin: isAdminEmail(email),
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(user))
   return user
