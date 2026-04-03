@@ -4,6 +4,7 @@
 const STORAGE_KEY = 'modo_user'
 const HISTORY_KEY = 'modo_history'
 const DOWNLOADS_KEY = 'modo_downloads'
+const FAVORITES_KEY = 'modo_favorites'
 
 const ADMIN_EMAILS = [
   'steve.rebeyrol@gmail.com',
@@ -123,4 +124,27 @@ export function canDownload() {
   if (!user) return false
   if (user.plan !== 'free') return true
   return (user.downloadsUsed || 0) < (user.downloadsLimit || 10)
+}
+
+// Favorites
+export function getFavorites() {
+  try {
+    return JSON.parse(localStorage.getItem(FAVORITES_KEY)) || []
+  } catch { return [] }
+}
+
+export function toggleFavorite(moduleId) {
+  const favs = getFavorites()
+  const idx = favs.indexOf(moduleId)
+  if (idx >= 0) {
+    favs.splice(idx, 1)
+  } else {
+    favs.push(moduleId)
+  }
+  localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs))
+  return favs
+}
+
+export function isFavorite(moduleId) {
+  return getFavorites().includes(moduleId)
 }

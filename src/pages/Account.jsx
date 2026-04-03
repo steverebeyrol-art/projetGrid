@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../components/AuthContext'
-import { getFabrications, getDownloads } from '../utils/auth'
+import { getFabrications, getDownloads, getFavorites, toggleFavorite } from '../utils/auth'
+import { getModuleById, GRID_UNIT, GRID_HEIGHT_UNIT } from '../data/modules'
 
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString('fr-FR', {
@@ -23,10 +24,20 @@ export default function Account() {
   const fabrications = getFabrications()
   const downloads = getDownloads()
 
+  const [favs, setFavs] = useState(getFavorites())
+
+  const handleRemoveFav = (moduleId) => {
+    const updated = toggleFavorite(moduleId)
+    setFavs([...updated])
+  }
+
+  const favModules = favs.map(id => getModuleById(id)).filter(Boolean)
+
   const tabs = [
-    { id: 'overview', label: 'Aperçu', icon: '👤' },
+    { id: 'overview', label: 'Apercu', icon: '👤' },
+    { id: 'favorites', label: 'Favoris', icon: '♥' },
     { id: 'fabrications', label: 'Fabrications', icon: '🏭' },
-    { id: 'downloads', label: 'Téléchargements', icon: '📥' },
+    { id: 'downloads', label: 'Telechargements', icon: '📥' },
     { id: 'subscription', label: 'Abonnement', icon: '💳' },
   ]
 
@@ -92,6 +103,41 @@ export default function Account() {
                 <Link to="/designer" className="btn btn-primary">Ouvrir le Designer</Link>
                 <Link to="/pricing" className="btn btn-secondary">Changer de forfait</Link>
               </div>
+            </div>
+          )}
+
+          {tab === 'favorites' && (
+            <div>
+              <h2>Mes favoris</h2>
+              {favModules.length === 0 ? (
+                <div className="empty-state">
+                  <p>Aucun module en favori pour le moment.</p>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                    Parcourez les modules et cliquez sur le coeur pour les ajouter ici.
+                  </p>
+                  <Link to="/modules/cuisine" className="btn btn-primary">Parcourir les modules</Link>
+                </div>
+              ) : (
+                <div className="fav-grid">
+                  {favModules.map(mod => (
+                    <div key={mod.id} className="bento-card fav-card">
+                      <div className="fav-card-top">
+                        <div className="fav-card-icon" style={{ background: mod.color }}>{mod.icon}</div>
+                        <button className="cat-fav-btn active" onClick={() => handleRemoveFav(mod.id)} title="Retirer des favoris">
+                          &#9829;
+                        </button>
+                      </div>
+                      <h4>{mod.name}</h4>
+                      <p className="fav-card-desc">{mod.description}</p>
+                      <div className="fav-card-specs">
+                        <span className="cat-spec">{mod.w}x{mod.d}x{mod.h} u</span>
+                        <span className="cat-spec">{mod.w * GRID_UNIT}x{mod.d * GRID_UNIT}x{mod.h * GRID_HEIGHT_UNIT} mm</span>
+                      </div>
+                      <Link to="/designer" className="btn btn-secondary btn-sm btn-block">Utiliser</Link>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
