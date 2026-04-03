@@ -14,9 +14,13 @@ export default function ModuleCatalog({ activeModule, onSelectModule }) {
   })).filter(cat => cat.modules.length > 0)
 
   return (
-    <div className="panel-section catalog-section">
-      <h3 className="panel-title">🧩 Modules</h3>
-      <p className="panel-hint">Cliquez sur un module puis cliquez sur la grille pour le placer.</p>
+    <div className="d-card catalog-section">
+      <div className="d-card-header">
+        <h3 className="d-card-title">Modules</h3>
+        <span className="pill pill-sm">{filteredCategories.reduce((a, c) => a + c.modules.length, 0)}</span>
+      </div>
+
+      <p className="d-card-hint">Cliquez sur un module puis sur la grille pour le placer.</p>
 
       <input
         type="text"
@@ -50,7 +54,7 @@ export default function ModuleCatalog({ activeModule, onSelectModule }) {
                     </div>
                     <div className="module-card-info">
                       <div className="module-card-name">{mod.name}</div>
-                      <div className="module-card-size">{mod.w}×{mod.d}×{mod.h}u</div>
+                      <div className="module-card-size">{mod.w}x{mod.d}x{mod.h}u</div>
                     </div>
                   </div>
                 ))}
@@ -65,7 +69,7 @@ export default function ModuleCatalog({ activeModule, onSelectModule }) {
           <div className="catalog-active-inner">
             <span className="catalog-active-icon" style={{ background: activeModule.color }}>{activeModule.icon}</span>
             <span className="catalog-active-name">{activeModule.name}</span>
-            <button className="catalog-active-cancel" onClick={() => onSelectModule(null)}>✕</button>
+            <button className="catalog-active-cancel" onClick={() => onSelectModule(null)}>&#10005;</button>
           </div>
           <p className="catalog-active-hint">Cliquez sur la grille pour placer le module</p>
         </div>

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { GRID_UNIT } from '../data/modules'
 
 export default function GridConfig({ gridSize, setGridSize }) {
-  const [mode, setMode] = useState('units') // 'units' or 'mm'
+  const [mode, setMode] = useState('units')
   const [mmX, setMmX] = useState(gridSize.x * GRID_UNIT)
   const [mmY, setMmY] = useState(gridSize.y * GRID_UNIT)
 
@@ -27,22 +27,23 @@ export default function GridConfig({ gridSize, setGridSize }) {
   }
 
   const handleMmBlur = (axis) => {
-    // Snap to nearest grid on blur
     if (axis === 'x') setMmX(gridSize.x * GRID_UNIT)
     else setMmY(gridSize.y * GRID_UNIT)
   }
 
   return (
-    <div className="panel-section">
-      <h3 className="panel-title">⬡ Configuration Grille</h3>
+    <div className="d-card">
+      <div className="d-card-header">
+        <h3 className="d-card-title">Configuration</h3>
+        <span className="pill pill-sm">{gridSize.x * GRID_UNIT} x {gridSize.y * GRID_UNIT} mm</span>
+      </div>
 
-      {/* Mode toggle */}
       <div className="grid-mode-toggle">
         <button
           className={`grid-mode-btn ${mode === 'units' ? 'active' : ''}`}
           onClick={() => setMode('units')}
         >
-          Par unités
+          Par unites
         </button>
         <button
           className={`grid-mode-btn ${mode === 'mm' ? 'active' : ''}`}
@@ -54,7 +55,6 @@ export default function GridConfig({ gridSize, setGridSize }) {
 
       {mode === 'units' ? (
         <>
-          {/* Mode unités : slider + affichage mm */}
           <div className="config-row">
             <label>Largeur (X)</label>
             <div className="config-slider">
@@ -91,9 +91,8 @@ export default function GridConfig({ gridSize, setGridSize }) {
         </>
       ) : (
         <>
-          {/* Mode dimensions : saisir en mm, calcul auto du nombre de carrés */}
           <div className="config-mm-input">
-            <label>Largeur souhaitée</label>
+            <label>Largeur souhaitee</label>
             <div className="config-mm-row">
               <input
                 type="number"
@@ -106,7 +105,7 @@ export default function GridConfig({ gridSize, setGridSize }) {
               <span className="config-mm-unit">mm</span>
             </div>
             <div className="config-dim-calc">
-              → <strong>{gridSize.x} carrés</strong> de 42 mm = {gridSize.x * GRID_UNIT} mm
+              &rarr; <strong>{gridSize.x} carres</strong> de 42 mm = {gridSize.x * GRID_UNIT} mm
               {mmX !== gridSize.x * GRID_UNIT && (
                 <span className="config-dim-diff"> (arrondi depuis {mmX} mm)</span>
               )}
@@ -114,7 +113,7 @@ export default function GridConfig({ gridSize, setGridSize }) {
           </div>
 
           <div className="config-mm-input">
-            <label>Profondeur souhaitée</label>
+            <label>Profondeur souhaitee</label>
             <div className="config-mm-row">
               <input
                 type="number"
@@ -127,7 +126,7 @@ export default function GridConfig({ gridSize, setGridSize }) {
               <span className="config-mm-unit">mm</span>
             </div>
             <div className="config-dim-calc">
-              → <strong>{gridSize.y} carrés</strong> de 42 mm = {gridSize.y * GRID_UNIT} mm
+              &rarr; <strong>{gridSize.y} carres</strong> de 42 mm = {gridSize.y * GRID_UNIT} mm
               {mmY !== gridSize.y * GRID_UNIT && (
                 <span className="config-dim-diff"> (arrondi depuis {mmY} mm)</span>
               )}
@@ -136,11 +135,10 @@ export default function GridConfig({ gridSize, setGridSize }) {
         </>
       )}
 
-      {/* Résumé total */}
       <div className="config-summary">
         <div className="config-summary-label">Grille totale</div>
         <div className="config-summary-value">
-          {gridSize.x}×{gridSize.y} ({gridSize.x * GRID_UNIT} × {gridSize.y * GRID_UNIT} mm)
+          {gridSize.x}x{gridSize.y} ({gridSize.x * GRID_UNIT} x {gridSize.y * GRID_UNIT} mm)
         </div>
       </div>
     </div>

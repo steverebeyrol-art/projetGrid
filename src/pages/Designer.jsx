@@ -80,11 +80,11 @@ export default function Designer() {
 
   const handleExport = () => {
     if (!user) {
-      alert('Connectez-vous pour exporter vos modèles.')
+      alert('Connectez-vous pour exporter vos modeles.')
       return
     }
     if (!canDownload()) {
-      alert('Vous avez atteint la limite de téléchargements. Passez à un forfait supérieur.')
+      alert('Vous avez atteint la limite de telechargements. Passez a un forfait superieur.')
       return
     }
     if (sceneRef.current) {
@@ -107,38 +107,50 @@ export default function Designer() {
     <div className="designer">
       {/* Left panel */}
       <div className={`designer-left ${leftCollapsed ? 'collapsed' : ''}`}>
-        <button className="panel-collapse-btn" onClick={() => setLeftCollapsed(!leftCollapsed)} title={leftCollapsed ? 'Ouvrir' : 'Réduire'}>
+        <button className="panel-collapse-btn" onClick={() => setLeftCollapsed(!leftCollapsed)} title={leftCollapsed ? 'Ouvrir' : 'Reduire'}>
           {leftCollapsed ? '▶' : '◀'}
         </button>
         {!leftCollapsed && (
-          <>
-            <GridConfig gridSize={gridSize} setGridSize={setGridSize} />
-            <ModuleCatalog
-              activeModule={catalogModule}
-              onSelectModule={setCatalogModule}
-            />
-            <div className="panel-section">
+          <div className="designer-panel-scroll">
+            <div className="designer-panel-inner">
+              <GridConfig gridSize={gridSize} setGridSize={setGridSize} />
+              <ModuleCatalog
+                activeModule={catalogModule}
+                onSelectModule={setCatalogModule}
+              />
               <button className="btn btn-secondary btn-block creator-open-btn" onClick={() => setShowCreator(true)}>
-                ✨ Créer un module sur mesure
+                Creer un module sur mesure
               </button>
             </div>
-            {showCreator && (
-              <div className="modal-overlay" onClick={() => setShowCreator(false)}>
-                <div className="modal-card modal-creator" onClick={e => e.stopPropagation()}>
-                  <div className="modal-creator-header">
-                    <h3>✨ Créer un module sur mesure</h3>
-                    <button className="modal-close-btn" onClick={() => setShowCreator(false)}>✕</button>
-                  </div>
-                  <ModuleCreator onClose={() => setShowCreator(false)} />
-                </div>
+          </div>
+        )}
+        {showCreator && (
+          <div className="modal-overlay" onClick={() => setShowCreator(false)}>
+            <div className="modal-card modal-creator" onClick={e => e.stopPropagation()}>
+              <div className="modal-creator-header">
+                <h3>Creer un module sur mesure</h3>
+                <button className="modal-close-btn" onClick={() => setShowCreator(false)}>&#10005;</button>
               </div>
-            )}
-          </>
+              <ModuleCreator onClose={() => setShowCreator(false)} />
+            </div>
+          </div>
         )}
       </div>
 
       {/* Center - 3D Viewport */}
       <div className="designer-center">
+        <div className="viewport-top-bar">
+          <div className="viewport-top-left">
+            <span className="pill pill-sm">Grille {gridSize.x}x{gridSize.y}</span>
+            <span className="viewport-module-count">{placedModules.length} module{placedModules.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="viewport-top-right">
+            <button className="btn btn-primary btn-sm" onClick={handleExport}>
+              Export STL
+            </button>
+          </div>
+        </div>
+
         <DesignerViewport
           gridSize={gridSize}
           placedModules={placedModules}
@@ -149,34 +161,34 @@ export default function Designer() {
           catalogModule={catalogModule}
           sceneRef={sceneRef}
         />
-        <div className="viewport-toolbar">
-          <button className="btn btn-primary btn-sm" onClick={handleExport}>
-            📥 Export STL
-          </button>
-        </div>
+
         <div className="viewport-info">
           {catalogModule
             ? `Mode placement : ${catalogModule.name} — Cliquez sur la grille pour placer, Echap pour annuler`
-            : 'Clic gauche: Rotation | Clic droit: Translation | Molette: Zoom | Clic sur module: Sélectionner/Déplacer'
+            : 'Clic gauche: Rotation | Clic droit: Translation | Molette: Zoom | Clic sur module: Selectionner/Deplacer'
           }
         </div>
       </div>
 
       {/* Right panel */}
       <div className={`designer-right ${rightCollapsed ? 'collapsed' : ''}`}>
-        <button className="panel-collapse-btn right" onClick={() => setRightCollapsed(!rightCollapsed)} title={rightCollapsed ? 'Ouvrir' : 'Réduire'}>
+        <button className="panel-collapse-btn right" onClick={() => setRightCollapsed(!rightCollapsed)} title={rightCollapsed ? 'Ouvrir' : 'Reduire'}>
           {rightCollapsed ? '◀' : '▶'}
         </button>
         {!rightCollapsed && (
-          <PropertiesPanel
-            module={selectedModule}
-            gridSize={gridSize}
-            onRotate={handleRotateModule}
-            onDelete={handleDeleteModule}
-            onDuplicate={handleDuplicateModule}
-            onUpdate={handleUpdateModule}
-            placedModules={placedModules}
-          />
+          <div className="designer-panel-scroll">
+            <div className="designer-panel-inner">
+              <PropertiesPanel
+                module={selectedModule}
+                gridSize={gridSize}
+                onRotate={handleRotateModule}
+                onDelete={handleDeleteModule}
+                onDuplicate={handleDuplicateModule}
+                onUpdate={handleUpdateModule}
+                placedModules={placedModules}
+              />
+            </div>
+          </div>
         )}
       </div>
     </div>
