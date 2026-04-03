@@ -1,19 +1,18 @@
 import { useState } from 'react'
 import { getAllCategories } from '../utils/moduleStore'
 
-export default function ModuleCatalog({ activeModule, onSelectModule, externalSearch = '' }) {
+export default function ModuleCatalog({ activeModule, onSelectModule }) {
   const CATEGORIES = getAllCategories()
   const [openCategory, setOpenCategory] = useState(CATEGORIES[0]?.id)
   const [search, setSearch] = useState('')
 
-  const activeSearch = externalSearch || search
-  const isSearching = activeSearch.trim().length > 0
+  const isSearching = search.trim().length > 0
 
   const filteredCategories = CATEGORIES.map(cat => ({
     ...cat,
     modules: cat.modules.filter(m =>
-      m.name.toLowerCase().includes(activeSearch.toLowerCase()) ||
-      m.description.toLowerCase().includes(activeSearch.toLowerCase())
+      m.name.toLowerCase().includes(search.toLowerCase()) ||
+      m.description.toLowerCase().includes(search.toLowerCase())
     )
   })).filter(cat => cat.modules.length > 0)
 

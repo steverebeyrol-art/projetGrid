@@ -16,7 +16,6 @@ export default function Designer() {
   const [leftCollapsed, setLeftCollapsed] = useState(false)
   const [rightCollapsed, setRightCollapsed] = useState(false)
   const [showCreator, setShowCreator] = useState(false)
-  const [globalSearch, setGlobalSearch] = useState('')
   const sceneRef = useRef(null)
   const { user, refreshUser } = useAuth()
 
@@ -113,25 +112,11 @@ export default function Designer() {
         </button>
         {!leftCollapsed && (
           <div className="designer-panel-scroll">
-            <div className="designer-search-bar">
-              <span className="designer-search-icon">&#x1F50D;</span>
-              <input
-                type="text"
-                className="designer-search-input"
-                placeholder="Rechercher modules, categories..."
-                value={globalSearch}
-                onChange={e => setGlobalSearch(e.target.value)}
-              />
-              {globalSearch && (
-                <button className="designer-search-clear" onClick={() => setGlobalSearch('')}>&#10005;</button>
-              )}
-            </div>
             <div className="designer-panel-inner">
               <GridConfig gridSize={gridSize} setGridSize={setGridSize} />
               <ModuleCatalog
                 activeModule={catalogModule}
                 onSelectModule={setCatalogModule}
-                externalSearch={globalSearch}
               />
               <button className="btn btn-secondary btn-block creator-open-btn" onClick={() => setShowCreator(true)}>
                 Creer un module sur mesure
