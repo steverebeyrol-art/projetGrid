@@ -1,12 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../components/AuthContext'
 import {
-  getAllCategories, getCustomCategories, getCustomModules,
+  getAllCategories, getCategories, getModules,
   addCategory, updateCategory, deleteCategory,
-  addModule, updateModule, deleteModule,
+  addModule, updateModule, deleteModule, resetToDefaults,
 } from '../utils/moduleStore'
-import { CATEGORIES as BUILTIN_CATEGORIES } from '../data/modules'
 
 export default function Admin() {
   const { user } = useAuth()
@@ -26,11 +25,8 @@ export default function Admin() {
   if (!user || !user.isAdmin) return null
 
   const refresh = () => setCategories(getAllCategories())
-
-  const builtInCount = BUILTIN_CATEGORIES.reduce((s, c) => s + c.modules.length, 0)
-  const customModCount = getCustomModules().length
-  const customCatCount = getCustomCategories().length
-  const totalModules = builtInCount + customModCount
+  const totalModules = getModules().length
+  const totalCats = getCategories().length
 
   // Category handlers
   const handleSaveCat = (data) => {
@@ -45,7 +41,8 @@ export default function Admin() {
   }
 
   const handleDeleteCat = (id) => {
-    if (!confirm('Supprimer cette categorie et tous ses modules ?')) return
+    const cat = categories.find(c => c.id === id)
+    if (!confirm(`Supprimer "${cat?.name}" et tous ses modules ?`)) return
     deleteCategory(id)
     refresh()
     if (selectedCatId === id) setSelectedCatId(null)
@@ -79,7 +76,12 @@ export default function Admin() {
     setShowModForm(true)
   }
 
-  // Get modules for selected category or all custom modules
+  const handleReset = () => {
+    if (!confirm('Reinitialiser toutes les categories et modules aux valeurs par defaut ? Les modifications seront perdues.')) return
+    resetToDefaults()
+    refresh()
+  }
+
   const selectedCat = selectedCatId ? categories.find(c => c.id === selectedCatId) : null
 
   return (
@@ -106,7 +108,7 @@ export default function Admin() {
           {tab === 'categories' && (
             <div>
               <div className="admin-header">
-                <h2>Gestion des categories</h2>
+                <h2>Categories</h2>
                 <button className="btn btn-primary" onClick={() => { setEditingCat(null); setShowCatForm(true) }}>
                   + Nouvelle categorie
                 </button>
@@ -114,37 +116,34 @@ export default function Admin() {
 
               <div className="admin-summary">
                 <div className="stat-card">
-                  <div className="stat-value">{BUILTIN_CATEGORIES.length}</div>
-                  <div className="stat-label">Categories integrees</div>
+                  <div className="stat-value">{totalCats}</div>
+                  <div className="stat-label">Categories</div>
                 </div>
                 <div className="stat-card">
-                  <div className="stat-value">{customCatCount}</div>
-                  <div className="stat-label">Categories personnalisees</div>
+                  <div className="stat-value">{totalModules}</div>
+                  <div className="stat-label">Modules au total</div>
                 </div>
               </div>
 
               <div className="admin-modules-grid">
                 {categories.map(cat => (
                   <div key={cat.id} className="admin-module-card">
-                    <div className="admin-module-icon" style={{ background: cat.builtIn ? 'var(--bg-secondary)' : 'var(--accent-subtle)' }}>
+                    <div className="admin-module-icon" style={{ background: 'var(--bg-secondary)' }}>
                       {cat.icon}
                     </div>
                     <div className="admin-module-info">
                       <div className="admin-module-name">{cat.name}</div>
                       <div className="admin-module-meta">
-                        {cat.modules.length} module(s) {cat.builtIn ? '(integree)' : '(personnalisee)'}
+                        {cat.modules.length} module(s)
+                        {cat.slug && <> &middot; /{cat.slug}</>}
                       </div>
                     </div>
                     <div className="admin-module-actions">
                       <button className="btn btn-secondary btn-sm" onClick={() => { setSelectedCatId(cat.id); setTab('modules') }}>
                         Voir
                       </button>
-                      {!cat.builtIn && (
-                        <>
-                          <button className="btn btn-secondary btn-sm" onClick={() => handleEditCat(cat)}>Modifier</button>
-                          <button className="btn btn-danger btn-sm" onClick={() => handleDeleteCat(cat.id)}>Supprimer</button>
-                        </>
-                      )}
+                      <button className="btn btn-secondary btn-sm" onClick={() => handleEditCat(cat)}>Modifier</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => handleDeleteCat(cat.id)}>Supprimer</button>
                     </div>
                   </div>
                 ))}
@@ -198,17 +197,6 @@ export default function Admin() {
                 ))}
               </div>
 
-              <div className="admin-summary">
-                <div className="stat-card">
-                  <div className="stat-value">{builtInCount}</div>
-                  <div className="stat-label">Modules integres</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-value">{customModCount}</div>
-                  <div className="stat-label">Modules personnalises</div>
-                </div>
-              </div>
-
               {(() => {
                 const displayCats = selectedCatId
                   ? categories.filter(c => c.id === selectedCatId)
@@ -233,32 +221,22 @@ export default function Admin() {
                         <span className="pill pill-sm" style={{ marginLeft: '0.5rem' }}>{cat.modules.length}</span>
                       </h3>
                       <div className="admin-modules-grid">
-                        {cat.modules.map(mod => {
-                          const isCustom = mod.id.startsWith('mod-') || mod.id.startsWith('custom-')
-                          return (
-                            <div key={mod.id} className="admin-module-card">
-                              <div className="admin-module-icon" style={{ background: mod.color }}>{mod.icon}</div>
-                              <div className="admin-module-info">
-                                <div className="admin-module-name">{mod.name}</div>
-                                <div className="admin-module-meta">
-                                  {mod.w}x{mod.d}x{mod.h}u
-                                  {mod.stlFileName && <> &middot; {mod.stlFileName}</>}
-                                  {!isCustom && <> &middot; integre</>}
-                                </div>
-                              </div>
-                              <div className="admin-module-actions">
-                                {isCustom ? (
-                                  <>
-                                    <button className="btn btn-secondary btn-sm" onClick={() => handleEditMod(mod)}>Modifier</button>
-                                    <button className="btn btn-danger btn-sm" onClick={() => handleDeleteMod(mod.id)}>Supprimer</button>
-                                  </>
-                                ) : (
-                                  <span className="pill pill-sm">Integre</span>
-                                )}
+                        {cat.modules.map(mod => (
+                          <div key={mod.id} className="admin-module-card">
+                            <div className="admin-module-icon" style={{ background: mod.color }}>{mod.icon}</div>
+                            <div className="admin-module-info">
+                              <div className="admin-module-name">{mod.name}</div>
+                              <div className="admin-module-meta">
+                                {mod.w}x{mod.d}x{mod.h}u
+                                {mod.stlFileName && <> &middot; {mod.stlFileName}</>}
                               </div>
                             </div>
-                          )
-                        })}
+                            <div className="admin-module-actions">
+                              <button className="btn btn-secondary btn-sm" onClick={() => handleEditMod(mod)}>Modifier</button>
+                              <button className="btn btn-danger btn-sm" onClick={() => handleDeleteMod(mod.id)}>Supprimer</button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )
@@ -284,20 +262,20 @@ export default function Admin() {
               <div className="admin-summary">
                 <div className="stat-card">
                   <div className="stat-value">{totalModules}</div>
-                  <div className="stat-label">Total modules</div>
+                  <div className="stat-label">Modules</div>
                 </div>
                 <div className="stat-card">
-                  <div className="stat-value">{categories.length}</div>
-                  <div className="stat-label">Total categories</div>
+                  <div className="stat-value">{totalCats}</div>
+                  <div className="stat-label">Categories</div>
                 </div>
-                <div className="stat-card">
-                  <div className="stat-value">{customModCount}</div>
-                  <div className="stat-label">Modules personnalises</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-value">{customCatCount}</div>
-                  <div className="stat-label">Categories personnalisees</div>
-                </div>
+              </div>
+              <div style={{ marginTop: '2rem' }}>
+                <button className="btn btn-danger" onClick={handleReset}>
+                  Reinitialiser aux valeurs par defaut
+                </button>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                  Remet toutes les categories et modules a leur etat initial.
+                </p>
               </div>
             </div>
           )}
@@ -312,12 +290,13 @@ function CategoryForm({ initial, onSave, onCancel }) {
   const [name, setName] = useState(initial?.name || '')
   const [icon, setIcon] = useState(initial?.icon || '📁')
   const [slug, setSlug] = useState(initial?.slug || '')
+  const [description, setDescription] = useState(initial?.description || '')
 
   const handleSubmit = (e) => {
     e.preventDefault()
     if (!name) return
     const autoSlug = slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-    onSave({ name, icon, slug: autoSlug })
+    onSave({ name, icon, slug: autoSlug, description })
   }
 
   return (
@@ -334,6 +313,10 @@ function CategoryForm({ initial, onSave, onCancel }) {
               <label>Icone</label>
               <input type="text" value={icon} onChange={e => setIcon(e.target.value)} />
             </div>
+          </div>
+          <div className="form-field">
+            <label>Description</label>
+            <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Description de la categorie" />
           </div>
           <div className="form-field">
             <label>Slug URL (auto-genere si vide)</label>
@@ -355,7 +338,7 @@ function ModuleForm({ initial, categories, defaultCategory, onSave, onCancel }) 
     name: initial?.name || '',
     icon: initial?.icon || '📦',
     description: initial?.description || '',
-    category: initial?.category || defaultCategory || categories[0]?.id || 'kitchen',
+    category: initial?.category || defaultCategory || categories[0]?.id || '',
     w: initial?.w || 1,
     d: initial?.d || 1,
     h: initial?.h || 1,

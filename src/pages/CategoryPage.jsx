@@ -4,31 +4,6 @@ import { getAllCategories, GRID_UNIT, GRID_HEIGHT_UNIT } from '../utils/moduleSt
 import { useAuth } from '../components/AuthContext'
 import { getFavorites, toggleFavorite } from '../utils/auth'
 
-// Built-in slug mapping
-const builtInSlugs = {
-  cuisine: 'kitchen',
-  bureau: 'office',
-  'salle-de-bain': 'bathroom',
-}
-
-const builtInMeta = {
-  kitchen: {
-    title: 'Cuisine',
-    icon: '🍳',
-    desc: 'Organisez vos tiroirs et placards avec des modules sur mesure. Range-couverts, epices, ustensiles... tout a sa place.',
-  },
-  office: {
-    title: 'Bureau',
-    icon: '🖊️',
-    desc: 'Optimisez votre espace de travail. Stylos, cables, cartes, accessoires : chaque objet trouve son rangement.',
-  },
-  bathroom: {
-    title: 'Salle de bain',
-    icon: '🛁',
-    desc: 'Creez des rangements pratiques pour vos cosmetiques, brosses, accessoires de soin et produits de beaute.',
-  },
-}
-
 export default function CategoryPage() {
   const { slug } = useParams()
   const { user } = useAuth()
@@ -38,17 +13,10 @@ export default function CategoryPage() {
 
   const allCategories = getAllCategories()
 
-  // Resolve category: built-in slug mapping or custom category slug
-  const catId = builtInSlugs[slug] || null
-  const category = catId
-    ? allCategories.find(c => c.id === catId)
-    : allCategories.find(c => c.slug === slug)
+  // Find category by slug
+  const category = allCategories.find(c => c.slug === slug || c.id === slug)
 
-  const meta = category
-    ? (builtInMeta[category.id] || { title: category.name, icon: category.icon, desc: '' })
-    : null
-
-  if (!category || !meta) {
+  if (!category) {
     return (
       <div className="cat-page">
         <div className="bento-section" style={{ paddingTop: '4rem', textAlign: 'center' }}>
@@ -85,13 +53,7 @@ export default function CategoryPage() {
   // Build links for other categories
   const otherCategories = allCategories
     .filter(c => c.id !== category.id)
-    .map(c => {
-      // Determine slug for link
-      const reverseSlug = Object.entries(builtInSlugs).find(([, id]) => id === c.id)
-      const linkSlug = reverseSlug ? reverseSlug[0] : c.slug
-      return { slug: linkSlug, title: c.name, icon: c.icon }
-    })
-    .filter(c => c.slug)
+    .map(c => ({ slug: c.slug || c.id, title: c.name, icon: c.icon }))
 
   return (
     <div className="cat-page">
@@ -99,10 +61,10 @@ export default function CategoryPage() {
       <section className="bento-section" style={{ paddingTop: '2.5rem' }}>
         <div className="bento-card cat-hero">
           <div className="cat-hero-content">
-            <div className="cat-hero-icon">{meta.icon}</div>
+            <div className="cat-hero-icon">{category.icon}</div>
             <div>
-              <h1>{meta.title}</h1>
-              <p>{meta.desc}</p>
+              <h1>{category.name}</h1>
+              <p>{category.description || `Decouvrez les modules de la categorie ${category.name}`}</p>
             </div>
           </div>
           <div className="cat-hero-actions">

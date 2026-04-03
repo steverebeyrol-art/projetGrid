@@ -3,18 +3,12 @@ import { Link } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import { getAllCategories } from '../utils/moduleStore'
 
-const builtInSlugs = {
-  kitchen: 'cuisine',
-  office: 'bureau',
-  bathroom: 'salle-de-bain',
-}
-
 function getModuleLinks() {
   return getAllCategories().map(c => ({
-    slug: builtInSlugs[c.id] || c.slug || c.id,
+    slug: c.slug || c.id,
     label: c.name,
     icon: c.icon,
-  })).filter(l => l.slug)
+  }))
 }
 
 export default function Navbar() {
