@@ -5,47 +5,48 @@ import { OrbitControls } from '@react-three/drei'
 function HeroScene() {
   return (
     <>
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[5, 8, 5]} intensity={0.8} />
+      <ambientLight intensity={0.6} />
+      <directionalLight position={[5, 8, 5]} intensity={0.9} />
+      <directionalLight position={[-3, 4, -2]} intensity={0.3} />
       <group scale={0.4} position={[0, -1, 0]}>
         {/* Base grid */}
         <mesh position={[0, 0, 0]}>
           <boxGeometry args={[6, 0.3, 6]} />
-          <meshStandardMaterial color="#6366f1" />
+          <meshStandardMaterial color="#D4C4B0" />
         </mesh>
         {/* Grid lines */}
         {[-2, 0, 2].map(x => (
           <mesh key={`gx${x}`} position={[x, 0.2, 0]}>
             <boxGeometry args={[0.03, 0.05, 6]} />
-            <meshStandardMaterial color="#818cf8" />
+            <meshStandardMaterial color="#C8B89A" />
           </mesh>
         ))}
         {[-2, 0, 2].map(z => (
           <mesh key={`gz${z}`} position={[0, 0.2, z]}>
             <boxGeometry args={[6, 0.05, 0.03]} />
-            <meshStandardMaterial color="#818cf8" />
+            <meshStandardMaterial color="#C8B89A" />
           </mesh>
         ))}
         {/* Modules */}
         <mesh position={[-2, 0.9, -2]}>
           <boxGeometry args={[1.8, 1.5, 1.8]} />
-          <meshStandardMaterial color="#22c55e" />
+          <meshStandardMaterial color="#8B6E4E" />
         </mesh>
         <mesh position={[0, 0.55, -2]}>
           <boxGeometry args={[1.8, 0.8, 1.8]} />
-          <meshStandardMaterial color="#f59e0b" />
+          <meshStandardMaterial color="#C8956C" />
         </mesh>
         <mesh position={[2, 1.2, -2]}>
           <boxGeometry args={[1.8, 2.1, 1.8]} />
-          <meshStandardMaterial color="#ef4444" />
+          <meshStandardMaterial color="#A0826D" />
         </mesh>
         <mesh position={[-2, 0.55, 0]}>
           <boxGeometry args={[1.8, 0.8, 1.8]} />
-          <meshStandardMaterial color="#06b6d4" />
+          <meshStandardMaterial color="#B8A08A" />
         </mesh>
         <mesh position={[0, 0.9, 0]}>
           <boxGeometry args={[1.8, 1.5, 1.8]} />
-          <meshStandardMaterial color="#a78bfa" />
+          <meshStandardMaterial color="#6B5B4E" />
         </mesh>
       </group>
       <OrbitControls enableZoom={false} enablePan={false} autoRotate autoRotateSpeed={1.5} />

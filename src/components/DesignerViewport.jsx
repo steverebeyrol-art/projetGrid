@@ -37,7 +37,7 @@ function BaseGrid({ gridSize }) {
       {/* Base plate */}
       <mesh position={[w / 2, h / 2, d / 2]} receiveShadow>
         <boxGeometry args={[w, h, d]} />
-        <meshStandardMaterial color="#2a2f3e" />
+        <meshStandardMaterial color="#D4C4B0" />
       </mesh>
 
       {/* Grid cells */}
@@ -49,7 +49,7 @@ function BaseGrid({ gridSize }) {
             rotation={[-Math.PI / 2, 0, 0]}
           >
             <planeGeometry args={[CELL - 0.005, CELL - 0.005]} />
-            <meshStandardMaterial color="#343952" transparent opacity={0.5} />
+            <meshStandardMaterial color="#E8DFD4" transparent opacity={0.6} />
           </mesh>
         ))
       )}
@@ -58,13 +58,13 @@ function BaseGrid({ gridSize }) {
       {Array.from({ length: gridSize.x + 1 }, (_, i) => (
         <mesh key={`lx-${i}`} position={[i * CELL, h + 0.002, d / 2]}>
           <boxGeometry args={[0.003, 0.001, d]} />
-          <meshStandardMaterial color="#6366f1" transparent opacity={0.4} />
+          <meshStandardMaterial color="#B8A08A" transparent opacity={0.5} />
         </mesh>
       ))}
       {Array.from({ length: gridSize.y + 1 }, (_, i) => (
         <mesh key={`ly-${i}`} position={[w / 2, h + 0.002, i * CELL]}>
           <boxGeometry args={[w, 0.001, 0.003]} />
-          <meshStandardMaterial color="#6366f1" transparent opacity={0.4} />
+          <meshStandardMaterial color="#B8A08A" transparent opacity={0.5} />
         </mesh>
       ))}
     </group>
@@ -94,15 +94,15 @@ function PlacedModule({ module, isSelected, onPointerDown }) {
         <meshStandardMaterial
           color={module.color}
           transparent
-          opacity={isSelected ? 1 : 0.85}
-          emissive={isSelected ? '#ffffff' : '#000000'}
-          emissiveIntensity={isSelected ? 0.1 : 0}
+          opacity={isSelected ? 1 : 0.9}
+          emissive={isSelected ? '#8B6E4E' : '#000000'}
+          emissiveIntensity={isSelected ? 0.15 : 0}
         />
       </mesh>
       {isSelected && (
         <mesh>
           <boxGeometry args={[w - 0.003, h + 0.002, d - 0.003]} />
-          <meshBasicMaterial color="#f59e0b" wireframe />
+          <meshBasicMaterial color="#8B6E4E" wireframe />
         </mesh>
       )}
       <mesh position={[0, 0.005, 0]}>
@@ -351,10 +351,10 @@ function Scene({ gridSize, placedModules, selectedId, onSelectModule, onPlaceMod
         position={[0, -0.001, 0]}
         cellSize={CELL}
         cellThickness={0.3}
-        cellColor="#1e2230"
+        cellColor="#E0D8CE"
         sectionSize={CELL * 4}
         sectionThickness={0.6}
-        sectionColor="#2d3142"
+        sectionColor="#D4C4B0"
         fadeDistance={8}
         infiniteGrid
       />
@@ -397,6 +397,7 @@ export default function DesignerViewport({ gridSize, placedModules, selectedId, 
           far: 100
         }}
         shadows
+        style={{ background: '#F5F1EC' }}
       >
         <Scene
           gridSize={gridSize}
