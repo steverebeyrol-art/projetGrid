@@ -1,42 +1,54 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { CATEGORIES, ALL_MODULES, GRID_UNIT, GRID_HEIGHT_UNIT } from '../data/modules'
+import { getAllCategories, GRID_UNIT, GRID_HEIGHT_UNIT } from '../utils/moduleStore'
 import { useAuth } from '../components/AuthContext'
 import { getFavorites, toggleFavorite } from '../utils/auth'
 
-const categoryMeta = {
-  cuisine: {
-    id: 'kitchen',
+// Built-in slug mapping
+const builtInSlugs = {
+  cuisine: 'kitchen',
+  bureau: 'office',
+  'salle-de-bain': 'bathroom',
+}
+
+const builtInMeta = {
+  kitchen: {
     title: 'Cuisine',
     icon: '🍳',
     desc: 'Organisez vos tiroirs et placards avec des modules sur mesure. Range-couverts, epices, ustensiles... tout a sa place.',
-    color: '#8B6E4E',
   },
-  bureau: {
-    id: 'office',
+  office: {
     title: 'Bureau',
     icon: '🖊️',
     desc: 'Optimisez votre espace de travail. Stylos, cables, cartes, accessoires : chaque objet trouve son rangement.',
-    color: '#5B8C5A',
   },
-  'salle-de-bain': {
-    id: 'bathroom',
+  bathroom: {
     title: 'Salle de bain',
     icon: '🛁',
     desc: 'Creez des rangements pratiques pour vos cosmetiques, brosses, accessoires de soin et produits de beaute.',
-    color: '#C8956C',
   },
 }
 
 export default function CategoryPage() {
   const { slug } = useParams()
-  const meta = categoryMeta[slug]
   const { user } = useAuth()
   const [search, setSearch] = useState('')
   const [favs, setFavs] = useState(getFavorites())
-  const [sortBy, setSortBy] = useState('name') // name | size | favorites
+  const [sortBy, setSortBy] = useState('name')
 
-  if (!meta) {
+  const allCategories = getAllCategories()
+
+  // Resolve category: built-in slug mapping or custom category slug
+  const catId = builtInSlugs[slug] || null
+  const category = catId
+    ? allCategories.find(c => c.id === catId)
+    : allCategories.find(c => c.slug === slug)
+
+  const meta = category
+    ? (builtInMeta[category.id] || { title: category.name, icon: category.icon, desc: '' })
+    : null
+
+  if (!category || !meta) {
     return (
       <div className="cat-page">
         <div className="bento-section" style={{ paddingTop: '4rem', textAlign: 'center' }}>
@@ -48,8 +60,7 @@ export default function CategoryPage() {
     )
   }
 
-  const category = CATEGORIES.find(c => c.id === meta.id)
-  const allCatModules = category ? category.modules : []
+  const allCatModules = category.modules || []
 
   const filtered = allCatModules.filter(m =>
     m.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -71,7 +82,16 @@ export default function CategoryPage() {
     setFavs([...updated])
   }
 
-  const otherCategories = Object.entries(categoryMeta).filter(([s]) => s !== slug)
+  // Build links for other categories
+  const otherCategories = allCategories
+    .filter(c => c.id !== category.id)
+    .map(c => {
+      // Determine slug for link
+      const reverseSlug = Object.entries(builtInSlugs).find(([, id]) => id === c.id)
+      const linkSlug = reverseSlug ? reverseSlug[0] : c.slug
+      return { slug: linkSlug, title: c.name, icon: c.icon }
+    })
+    .filter(c => c.slug)
 
   return (
     <div className="cat-page">
@@ -157,10 +177,10 @@ export default function CategoryPage() {
           <h2>Autres categories</h2>
         </div>
         <div className="cat-other-grid">
-          {otherCategories.map(([s, m]) => (
-            <Link key={s} to={`/modules/${s}`} className="bento-card cat-other-card">
-              <span className="cat-other-icon">{m.icon}</span>
-              <span className="cat-other-name">{m.title}</span>
+          {otherCategories.map(oc => (
+            <Link key={oc.slug} to={`/modules/${oc.slug}`} className="bento-card cat-other-card">
+              <span className="cat-other-icon">{oc.icon}</span>
+              <span className="cat-other-name">{oc.title}</span>
               <span className="cat-other-arrow">&rarr;</span>
             </Link>
           ))}

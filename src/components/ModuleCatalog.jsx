@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { CATEGORIES } from '../data/modules'
+import { getAllCategories } from '../utils/moduleStore'
 
 export default function ModuleCatalog({ activeModule, onSelectModule }) {
-  const [openCategory, setOpenCategory] = useState(CATEGORIES[0].id)
+  const CATEGORIES = getAllCategories()
+  const [openCategory, setOpenCategory] = useState(CATEGORIES[0]?.id)
   const [search, setSearch] = useState('')
 
   const filteredCategories = CATEGORIES.map(cat => ({

@@ -1616,7 +1616,39 @@ body {
 .admin-module-meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem; }
 .admin-module-stl { font-size: 0.7rem; color: var(--accent); margin-top: 0.15rem; }
 
-.admin-module-actions { display: flex; gap: 0.5rem; }
+.admin-module-actions { display: flex; gap: 0.5rem; align-items: center; }
+
+.admin-cat-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1.5rem;
+}
+
+.admin-cat-pills .pill {
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  transition: all var(--transition);
+}
+
+.admin-cat-pills .pill-active,
+.admin-cat-pills .pill:hover {
+  background: var(--accent);
+  color: white;
+}
+
+.admin-cat-section {
+  margin-bottom: 2rem;
+}
+
+.admin-cat-section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+}
 
 /* Modal */
 .modal-overlay {

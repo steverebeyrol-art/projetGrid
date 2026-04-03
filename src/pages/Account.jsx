@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../components/AuthContext'
 import { getFabrications, getDownloads, getFavorites, toggleFavorite } from '../utils/auth'
-import { getModuleById, GRID_UNIT, GRID_HEIGHT_UNIT } from '../data/modules'
+import { getModuleById, GRID_UNIT, GRID_HEIGHT_UNIT } from '../utils/moduleStore'
 
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString('fr-FR', {

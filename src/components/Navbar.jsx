@@ -1,12 +1,21 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from './AuthContext'
+import { getAllCategories } from '../utils/moduleStore'
 
-const moduleLinks = [
-  { slug: 'cuisine', label: 'Cuisine', icon: '🍳' },
-  { slug: 'bureau', label: 'Bureau', icon: '🖊️' },
-  { slug: 'salle-de-bain', label: 'Salle de bain', icon: '🛁' },
-]
+const builtInSlugs = {
+  kitchen: 'cuisine',
+  office: 'bureau',
+  bathroom: 'salle-de-bain',
+}
+
+function getModuleLinks() {
+  return getAllCategories().map(c => ({
+    slug: builtInSlugs[c.id] || c.slug || c.id,
+    label: c.name,
+    icon: c.icon,
+  })).filter(l => l.slug)
+}
 
 export default function Navbar() {
   const { user } = useAuth()
@@ -30,7 +39,7 @@ export default function Navbar() {
           <span className="nav-link nav-link-trigger">Modules</span>
           {showModules && (
             <div className="nav-dropdown-menu">
-              {moduleLinks.map(m => (
+              {getModuleLinks().map(m => (
                 <Link key={m.slug} to={`/modules/${m.slug}`} className="nav-dropdown-item" onClick={() => setShowModules(false)}>
                   <span>{m.icon}</span>
                   <span>{m.label}</span>
