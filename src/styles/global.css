@@ -1997,6 +1997,8 @@ body {
 .cr-option input[type="range"] { width: 100%; -webkit-appearance: none; appearance: none; height: 4px; background: var(--border); border-radius: 2px; }
 .cr-option input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); cursor: pointer; }
 .cr-option-hint { font-size: 0.68rem; color: var(--text-muted); margin: 0; }
+.cr-option-success { font-size: 0.78rem; font-weight: 600; color: #22c55e; margin-bottom: 0.3rem; }
+.cr-margin-option { background: var(--bg-input); padding: 0.6rem; border-radius: var(--radius-sm); }
 
 /* Viewport 3D */
 .cr-viewport { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 0.75rem; }

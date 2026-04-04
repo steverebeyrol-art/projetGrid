@@ -240,68 +240,89 @@ export function cleanMask(mask, w, h, dilateRadius = 2, erodeRadius = 2) {
 // ========== CONTOUR FROM MASK ==========
 
 /**
- * Extract the outer contour from a binary mask
- * Uses border pixel extraction + ordering for robustness
- * Returns array of {x, y} points
+ * Dilate a mask by a given radius (expand selection)
  */
-export function maskToContour(mask, w, h) {
-  // Find all border pixels (mask=1 with at least one neighbor mask=0)
-  const borderPixels = []
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
+export function dilateMask(mask, w, h, radius) {
+  if (radius <= 0) return new Uint8Array(mask)
+  const result = new Uint8Array(w * h)
+  const r2 = radius * radius
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
       if (!mask[y * w + x]) continue
-      // Check 4-neighbors
-      if (!mask[(y - 1) * w + x] || !mask[(y + 1) * w + x] ||
-          !mask[y * w + (x - 1)] || !mask[y * w + (x + 1)]) {
-        borderPixels.push({ x, y })
-      }
-    }
-  }
-
-  if (borderPixels.length < 3) return borderPixels
-
-  // Order border pixels by walking along the border
-  // Start from the topmost-leftmost border pixel
-  const ordered = []
-  const used = new Set()
-
-  // Find start: topmost, then leftmost
-  let start = borderPixels[0]
-  for (const p of borderPixels) {
-    if (p.y < start.y || (p.y === start.y && p.x < start.x)) start = p
-  }
-
-  // Build a lookup for fast neighbor search
-  const borderSet = new Set(borderPixels.map(p => `${p.x},${p.y}`))
-
-  let current = start
-  const maxIter = borderPixels.length + 10
-
-  for (let iter = 0; iter < maxIter; iter++) {
-    const key = `${current.x},${current.y}`
-    if (used.has(key)) break
-    ordered.push(current)
-    used.add(key)
-
-    // Find nearest unused border neighbor (8-connected)
-    let best = null
-    let bestDist = Infinity
-    for (let dy = -2; dy <= 2; dy++) {
-      for (let dx = -2; dx <= 2; dx++) {
-        if (dx === 0 && dy === 0) continue
-        const nk = `${current.x + dx},${current.y + dy}`
-        if (borderSet.has(nk) && !used.has(nk)) {
-          const d = Math.abs(dx) + Math.abs(dy)
-          if (d < bestDist) { bestDist = d; best = { x: current.x + dx, y: current.y + dy } }
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (dx * dx + dy * dy > r2) continue
+          const ny = y + dy, nx = x + dx
+          if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+            result[ny * w + nx] = 1
+          }
         }
       }
     }
+  }
+  return result
+}
 
-    if (!best) break
-    current = best
+/**
+ * Extract the outer contour from a binary mask using radial sweep
+ * Shoots rays from the centroid at regular angles and finds the farthest
+ * mask pixel in each direction. Always produces a clean, ordered polygon.
+ * Returns array of {x, y} points
+ */
+export function maskToContour(mask, w, h, numRays = 120) {
+  // Find centroid of mask
+  let cx = 0, cy = 0, count = 0
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (mask[y * w + x]) { cx += x; cy += y; count++ }
+    }
+  }
+  if (count === 0) return []
+  cx = Math.round(cx / count)
+  cy = Math.round(cy / count)
+
+  // Find max possible radius
+  const maxRadius = Math.max(w, h)
+
+  // Shoot rays from centroid at regular angles
+  const contour = []
+  for (let i = 0; i < numRays; i++) {
+    const angle = (i / numRays) * Math.PI * 2
+    const dx = Math.cos(angle)
+    const dy = Math.sin(angle)
+
+    // Walk along the ray and find the farthest mask pixel
+    let lastX = cx, lastY = cy
+    let foundAny = false
+    for (let r = 0; r < maxRadius; r++) {
+      const x = Math.round(cx + dx * r)
+      const y = Math.round(cy + dy * r)
+      if (x < 0 || x >= w || y < 0 || y >= h) break
+      if (mask[y * w + x]) {
+        lastX = x
+        lastY = y
+        foundAny = true
+      } else if (foundAny) {
+        // Exited the mask region
+        break
+      }
+    }
+
+    if (foundAny) {
+      contour.push({ x: lastX, y: lastY })
+    }
   }
 
-  return ordered
+  // Remove duplicate consecutive points
+  const filtered = [contour[0]]
+  for (let i = 1; i < contour.length; i++) {
+    const prev = filtered[filtered.length - 1]
+    if (Math.abs(contour[i].x - prev.x) > 1 || Math.abs(contour[i].y - prev.y) > 1) {
+      filtered.push(contour[i])
+    }
+  }
+
+  return filtered
 }
 
 /**
