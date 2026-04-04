@@ -464,11 +464,14 @@ function GridfinityModule3D({ contourMm, gridW, gridH, depth }) {
   const totalW = gridW * GRID_UNIT
   const totalH = gridH * GRID_UNIT
   const s = 0.01 // mm to scene units
-  const wallThick = 2 // mm
-  const baseThick = 3 // mm - bottom plate thickness
+  const baseThick = 3 // mm - solid bottom under the cavity
   const cavityDepth = depth * GRID_UNIT * 0.5 // mm
+  const totalHeight = baseThick + cavityDepth // full block height in mm
 
-  // 1. Bottom plate (thin base)
+  // Single solid block = outer rectangle extruded to full height, with tool shape as hole extruded only for the cavity part
+  // Approach: solid base (full rectangle) + walls around cavity (full rect with hole, extruded cavity depth)
+
+  // 1. Solid base plate (full rectangle, no hole) - the bottom
   const basePlate = (
     <mesh position={[0, baseThick * s / 2, 0]}>
       <boxGeometry args={[totalW * s, baseThick * s, totalH * s]} />
@@ -476,57 +479,33 @@ function GridfinityModule3D({ contourMm, gridW, gridH, depth }) {
     </mesh>
   )
 
-  // 2. Outer walls (rectangular frame around the module)
-  const outerWalls = [
-    // Front wall
-    <mesh key="wf" position={[0, (baseThick + cavityDepth / 2) * s, -totalH * s / 2 + wallThick * s / 2]}>
-      <boxGeometry args={[totalW * s, cavityDepth * s, wallThick * s]} />
-      <meshStandardMaterial color="#B8A898" />
-    </mesh>,
-    // Back wall
-    <mesh key="wb" position={[0, (baseThick + cavityDepth / 2) * s, totalH * s / 2 - wallThick * s / 2]}>
-      <boxGeometry args={[totalW * s, cavityDepth * s, wallThick * s]} />
-      <meshStandardMaterial color="#B8A898" />
-    </mesh>,
-    // Left wall
-    <mesh key="wl" position={[-totalW * s / 2 + wallThick * s / 2, (baseThick + cavityDepth / 2) * s, 0]}>
-      <boxGeometry args={[wallThick * s, cavityDepth * s, totalH * s]} />
-      <meshStandardMaterial color="#B8A898" />
-    </mesh>,
-    // Right wall
-    <mesh key="wr" position={[totalW * s / 2 - wallThick * s / 2, (baseThick + cavityDepth / 2) * s, 0]}>
-      <boxGeometry args={[wallThick * s, cavityDepth * s, totalH * s]} />
-      <meshStandardMaterial color="#B8A898" />
-    </mesh>,
-  ]
-
-  // 3. The "raised floor" around the tool cavity
-  // All shape coordinates must be in scene units (mm * s)
-  let floorWithCavity = null
+  // 2. Upper part: full rectangle with tool contour as hole, extruded to cavity depth
+  let upperWalls = null
+  let cavityBottom = null
   if (contourMm.length >= 3) {
-    const inset = wallThick * s
-    const floorShape = new THREE.Shape()
-    floorShape.moveTo(inset, inset)
-    floorShape.lineTo(totalW * s - inset, inset)
-    floorShape.lineTo(totalW * s - inset, totalH * s - inset)
-    floorShape.lineTo(inset, totalH * s - inset)
-    floorShape.closePath()
+    // Full outer rectangle in scene units
+    const blockShape = new THREE.Shape()
+    blockShape.moveTo(0, 0)
+    blockShape.lineTo(totalW * s, 0)
+    blockShape.lineTo(totalW * s, totalH * s)
+    blockShape.lineTo(0, totalH * s)
+    blockShape.closePath()
 
-    // Tool contour as a hole (convert mm to scene units)
+    // Tool contour as a hole
     const holePath = new THREE.Path()
     holePath.moveTo(contourMm[0].x * s, contourMm[0].y * s)
     for (let i = 1; i < contourMm.length; i++) {
       holePath.lineTo(contourMm[i].x * s, contourMm[i].y * s)
     }
     holePath.closePath()
-    floorShape.holes.push(holePath)
+    blockShape.holes.push(holePath)
 
-    floorWithCavity = (
+    upperWalls = (
       <mesh
         position={[-totalW * s / 2, baseThick * s, -totalH * s / 2]}
         rotation={[-Math.PI / 2, 0, 0]}
       >
-        <extrudeGeometry args={[floorShape, {
+        <extrudeGeometry args={[blockShape, {
           steps: 1,
           depth: cavityDepth * s,
           bevelEnabled: false,
@@ -534,11 +513,8 @@ function GridfinityModule3D({ contourMm, gridW, gridH, depth }) {
         <meshStandardMaterial color="#D4C4B0" side={THREE.DoubleSide} />
       </mesh>
     )
-  }
 
-  // 4. Tool shape at bottom of cavity (colored)
-  let cavityBottom = null
-  if (contourMm.length >= 3) {
+    // Colored bottom of cavity (tool silhouette)
     const toolShape = new THREE.Shape()
     toolShape.moveTo(contourMm[0].x * s, contourMm[0].y * s)
     for (let i = 1; i < contourMm.length; i++) {
@@ -560,8 +536,7 @@ function GridfinityModule3D({ contourMm, gridW, gridH, depth }) {
   return (
     <group>
       {basePlate}
-      {outerWalls}
-      {floorWithCavity}
+      {upperWalls}
       {cavityBottom}
     </group>
   )
