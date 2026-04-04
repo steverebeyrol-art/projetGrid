@@ -264,65 +264,81 @@ export function dilateMask(mask, w, h, radius) {
 }
 
 /**
- * Extract the outer contour from a binary mask using radial sweep
- * Shoots rays from the centroid at regular angles and finds the farthest
- * mask pixel in each direction. Always produces a clean, ordered polygon.
+ * Extract the outer contour from a binary mask using border following.
+ * Finds border pixels (mask pixels adjacent to non-mask) then orders them
+ * by nearest-neighbor traversal to form a clean polygon.
+ * Works correctly for concave and complex shapes.
  * Returns array of {x, y} points
  */
 export function maskToContour(mask, w, h, numRays = 120) {
-  // Find centroid of mask
-  let cx = 0, cy = 0, count = 0
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      if (mask[y * w + x]) { cx += x; cy += y; count++ }
+  // Step 1: Find all border pixels
+  const borderPixels = []
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      if (!mask[y * w + x]) continue
+      // Check if any 4-connected neighbor is NOT in the mask
+      if (!mask[y * w + (x - 1)] || !mask[y * w + (x + 1)] ||
+          !mask[(y - 1) * w + x] || !mask[(y + 1) * w + x]) {
+        borderPixels.push({ x, y })
+      }
     }
   }
-  if (count === 0) return []
-  cx = Math.round(cx / count)
-  cy = Math.round(cy / count)
 
-  // Find max possible radius
-  const maxRadius = Math.max(w, h)
+  if (borderPixels.length < 3) return borderPixels
 
-  // Shoot rays from centroid at regular angles
-  const contour = []
-  for (let i = 0; i < numRays; i++) {
-    const angle = (i / numRays) * Math.PI * 2
-    const dx = Math.cos(angle)
-    const dy = Math.sin(angle)
+  // Step 2: Subsample border pixels if too many (for performance)
+  let points = borderPixels
+  if (points.length > 2000) {
+    const step = Math.ceil(points.length / 2000)
+    points = points.filter((_, i) => i % step === 0)
+  }
 
-    // Walk along the ray and find the farthest mask pixel
-    let lastX = cx, lastY = cy
-    let foundAny = false
-    for (let r = 0; r < maxRadius; r++) {
-      const x = Math.round(cx + dx * r)
-      const y = Math.round(cy + dy * r)
-      if (x < 0 || x >= w || y < 0 || y >= h) break
-      if (mask[y * w + x]) {
-        lastX = x
-        lastY = y
-        foundAny = true
-      } else if (foundAny) {
-        // Exited the mask region
-        break
+  // Step 3: Order points by nearest-neighbor traversal
+  // Start from the topmost-leftmost point
+  let startIdx = 0
+  for (let i = 1; i < points.length; i++) {
+    if (points[i].y < points[startIdx].y ||
+        (points[i].y === points[startIdx].y && points[i].x < points[startIdx].x)) {
+      startIdx = i
+    }
+  }
+
+  const ordered = [points[startIdx]]
+  const used = new Uint8Array(points.length)
+  used[startIdx] = 1
+
+  for (let n = 1; n < points.length; n++) {
+    const last = ordered[ordered.length - 1]
+    let bestIdx = -1
+    let bestDist = Infinity
+
+    for (let i = 0; i < points.length; i++) {
+      if (used[i]) continue
+      const dx = points[i].x - last.x
+      const dy = points[i].y - last.y
+      const dist = dx * dx + dy * dy
+      if (dist < bestDist) {
+        bestDist = dist
+        bestIdx = i
       }
     }
 
-    if (foundAny) {
-      contour.push({ x: lastX, y: lastY })
-    }
+    if (bestIdx === -1 || bestDist > 100) break // gap too large, stop
+    used[bestIdx] = 1
+    ordered.push(points[bestIdx])
   }
 
-  // Remove duplicate consecutive points
-  const filtered = [contour[0]]
-  for (let i = 1; i < contour.length; i++) {
-    const prev = filtered[filtered.length - 1]
-    if (Math.abs(contour[i].x - prev.x) > 1 || Math.abs(contour[i].y - prev.y) > 1) {
-      filtered.push(contour[i])
-    }
+  // Step 4: Subsample to target number of points for simplification
+  const targetPoints = Math.min(ordered.length, numRays)
+  if (ordered.length <= targetPoints) return ordered
+
+  const step = ordered.length / targetPoints
+  const result = []
+  for (let i = 0; i < targetPoints; i++) {
+    result.push(ordered[Math.round(i * step)])
   }
 
-  return filtered
+  return result
 }
 
 /**
