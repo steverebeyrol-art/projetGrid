@@ -501,23 +501,22 @@ function GridfinityModule3D({ contourMm, gridW, gridH, depth }) {
   ]
 
   // 3. The "raised floor" around the tool cavity
-  // Create a shape for the full interior, with the tool contour as a hole
+  // All shape coordinates must be in scene units (mm * s)
   let floorWithCavity = null
   if (contourMm.length >= 3) {
-    // Outer rectangle (interior of walls)
+    const inset = wallThick * s
     const floorShape = new THREE.Shape()
-    const inset = wallThick
     floorShape.moveTo(inset, inset)
-    floorShape.lineTo(totalW - inset, inset)
-    floorShape.lineTo(totalW - inset, totalH - inset)
-    floorShape.lineTo(inset, totalH - inset)
+    floorShape.lineTo(totalW * s - inset, inset)
+    floorShape.lineTo(totalW * s - inset, totalH * s - inset)
+    floorShape.lineTo(inset, totalH * s - inset)
     floorShape.closePath()
 
-    // Tool contour as a hole
+    // Tool contour as a hole (convert mm to scene units)
     const holePath = new THREE.Path()
-    holePath.moveTo(contourMm[0].x, contourMm[0].y)
+    holePath.moveTo(contourMm[0].x * s, contourMm[0].y * s)
     for (let i = 1; i < contourMm.length; i++) {
-      holePath.lineTo(contourMm[i].x, contourMm[i].y)
+      holePath.lineTo(contourMm[i].x * s, contourMm[i].y * s)
     }
     holePath.closePath()
     floorShape.holes.push(holePath)
@@ -537,13 +536,13 @@ function GridfinityModule3D({ contourMm, gridW, gridH, depth }) {
     )
   }
 
-  // 4. Tool shape shadow at bottom of cavity (colored)
+  // 4. Tool shape at bottom of cavity (colored)
   let cavityBottom = null
   if (contourMm.length >= 3) {
     const toolShape = new THREE.Shape()
-    toolShape.moveTo(contourMm[0].x, contourMm[0].y)
+    toolShape.moveTo(contourMm[0].x * s, contourMm[0].y * s)
     for (let i = 1; i < contourMm.length; i++) {
-      toolShape.lineTo(contourMm[i].x, contourMm[i].y)
+      toolShape.lineTo(contourMm[i].x * s, contourMm[i].y * s)
     }
     toolShape.closePath()
 
