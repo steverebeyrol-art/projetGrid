@@ -3,235 +3,180 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import {
-  processToolImage,
-  getContourBounds,
+  loadAndPrepareImage,
+  autoDetectPaperCorners,
+  calibrateFromCorners,
+  magicWandSelect,
+  addToMask,
+  subtractFromMask,
+  cleanMask,
+  maskToContour,
+  simplifyContour,
+  polygonToMask,
+  contourToMm,
+  getBounds,
   snapToGrid,
+  centerInGrid,
+  renderMaskOverlay,
+  renderContourOutline,
+  renderControlPoints,
+  renderPaperCorners,
 } from '../utils/contourDetection'
 import { addModule, getCategories, addCategory } from '../utils/moduleStore'
 
-const GRID_UNIT = 42 // mm
+const GRID_UNIT = 42
 
-// ===== Step 1: Photo Upload =====
-function StepUpload({ onPhotoReady }) {
+// ===== Step 1: Upload Photo =====
+function StepUpload({ onPhotoLoaded }) {
   const fileRef = useRef(null)
   const [dragOver, setDragOver] = useState(false)
-  const [processing, setProcessing] = useState(false)
-  const [error, setError] = useState(null)
+  const [loading, setLoading] = useState(false)
 
   const handleFile = useCallback(async (file) => {
     if (!file || !file.type.startsWith('image/')) return
-    setProcessing(true)
-    setError(null)
+    setLoading(true)
     try {
-      const result = await processToolImage(file, {
-        threshold: 110,
-        simplifyTolerance: 3,
-      })
-      if (result.contourMm.length < 10) {
-        setError("Impossible de detecter le contour de l'outil. Essayez avec une photo plus contrastee sur fond blanc.")
-        setProcessing(false)
-        return
-      }
-      onPhotoReady(result)
+      const data = await loadAndPrepareImage(file, 900)
+      onPhotoLoaded(data)
     } catch (err) {
-      console.error('Processing error:', err)
-      setError("Erreur lors du traitement de l'image. Reessayez.")
+      console.error(err)
+      alert("Erreur lors du chargement de l'image.")
     }
-    setProcessing(false)
-  }, [onPhotoReady])
-
-  const handleFileInput = (e) => {
-    if (e.target.files?.[0]) handleFile(e.target.files[0])
-  }
+    setLoading(false)
+  }, [onPhotoLoaded])
 
   const handleDrop = (e) => {
     e.preventDefault()
     setDragOver(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file) handleFile(file)
+    if (e.dataTransfer.files?.[0]) handleFile(e.dataTransfer.files[0])
   }
 
   return (
-    <div className="creator-step-upload">
-      <div className="creator-step-header">
-        <div className="creator-step-number">1</div>
+    <div className="cr-step">
+      <div className="cr-step-head">
+        <div className="cr-step-num">1</div>
         <div>
-          <h4>Photographiez votre outil</h4>
-          <p>Placez l'outil sur une feuille A4 blanche et prenez une photo.</p>
+          <h4>Photographiez votre objet</h4>
+          <p>Placez-le sur une feuille A4 blanche et prenez une photo du dessus.</p>
         </div>
       </div>
 
       <div
-        className={`creator-dropzone ${dragOver ? 'dragover' : ''} ${processing ? 'processing' : ''}`}
-        onClick={() => !processing && fileRef.current?.click()}
+        className={`cr-dropzone ${dragOver ? 'over' : ''} ${loading ? 'loading' : ''}`}
+        onClick={() => !loading && fileRef.current?.click()}
         onDragOver={e => { e.preventDefault(); setDragOver(true) }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
       >
-        {processing ? (
-          <>
-            <div className="creator-spinner" />
-            <p>Analyse de l'image en cours...</p>
-          </>
+        {loading ? (
+          <><div className="cr-spinner" /><p>Chargement...</p></>
         ) : (
-          <>
-            <span className="creator-dropzone-icon">📁</span>
-            <p><strong>Parcourir</strong> ou glisser-deposer</p>
-          </>
+          <><span className="cr-drop-icon">📁</span><p><strong>Parcourir</strong> ou glisser-deposer</p></>
         )}
       </div>
 
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        style={{ display: 'none' }}
-        onChange={handleFileInput}
-      />
+      <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
 
-      {error && <div className="creator-error">{error}</div>}
-
-      <div className="creator-tips">
-        <p className="creator-tip-title">Conseils :</p>
+      <div className="cr-tips">
+        <p className="cr-tips-title">Conseils pour de bons resultats :</p>
         <ul>
-          <li>Utilisez une feuille <strong>A4 blanche</strong> comme reference de mesure</li>
-          <li>Placez l'outil a plat sur la feuille</li>
-          <li>Bonne luminosite, evitez les ombres</li>
-          <li>L'outil doit etre plus fonce que le papier</li>
+          <li>Feuille <strong>A4 blanche</strong> = reference de mesure</li>
+          <li>Photo prise du <strong>dessus</strong>, bien droite</li>
+          <li>Bonne luminosite, eviter les ombres portees</li>
+          <li>L'objet doit etre entierement sur la feuille</li>
         </ul>
-      </div>
-
-      <div className="creator-examples">
-        <div className="creator-example-img">📐</div>
-        <div className="creator-example-img">🔧</div>
-        <div className="creator-example-img">✂️</div>
-        <div className="creator-example-img">🔨</div>
       </div>
     </div>
   )
 }
 
-// ===== Step 2: Contour Editor =====
-function StepContour({ data, onConfirm, onBack }) {
+// ===== Step 2: Mark A4 Paper Corners =====
+function StepPaper({ imageData, onCalibrated, onBack }) {
   const canvasRef = useRef(null)
-  const imgRef = useRef(null)
-  const [threshold, setThreshold] = useState(110)
-  const [offset, setOffset] = useState('medium')
-  const [contour, setContour] = useState(data.contourMm)
-  const [loaded, setLoaded] = useState(false)
+  const [corners, setCorners] = useState([])
+  const [autoCorners, setAutoCorners] = useState(null)
 
-  // Offset multiplier in mm
-  const offsets = { none: 0, small: 1, medium: 2, large: 3 }
-
+  // Try auto-detect on mount
   useEffect(() => {
-    const img = new Image()
-    img.onload = () => {
-      imgRef.current = img
-      setLoaded(true)
-    }
-    img.src = data.imageUrl
-  }, [data.imageUrl])
+    const detected = autoDetectPaperCorners(imageData.ctx, imageData.drawW, imageData.drawH)
+    if (detected) setAutoCorners(detected)
+  }, [imageData])
 
+  // Redraw canvas
   useEffect(() => {
-    if (!loaded || !canvasRef.current || !imgRef.current) return
-
     const canvas = canvasRef.current
+    if (!canvas) return
     const ctx = canvas.getContext('2d')
-    const img = imgRef.current
+    canvas.width = imageData.drawW
+    canvas.height = imageData.drawH
+    ctx.drawImage(imageData.img, 0, 0, imageData.drawW, imageData.drawH)
+    renderPaperCorners(ctx, corners)
 
-    // Fit image to canvas
-    const maxW = canvas.parentElement.clientWidth - 20
-    const maxH = 400
-    const scale = Math.min(maxW / data.maskWidth, maxH / data.maskHeight)
-    canvas.width = Math.round(data.maskWidth * scale)
-    canvas.height = Math.round(data.maskHeight * scale)
-
-    // Draw original image
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-
-    // Draw semi-transparent overlay on detected tool
-    const overlayCanvas = document.createElement('canvas')
-    overlayCanvas.width = data.maskWidth
-    overlayCanvas.height = data.maskHeight
-    const octx = overlayCanvas.getContext('2d')
-    const imgData = octx.createImageData(data.maskWidth, data.maskHeight)
-    for (let i = 0; i < data.maskWidth * data.maskHeight; i++) {
-      if (data.mask[i]) {
-        imgData.data[i * 4] = 139
-        imgData.data[i * 4 + 1] = 110
-        imgData.data[i * 4 + 2] = 78
-        imgData.data[i * 4 + 3] = 80
-      }
+    if (corners.length < 4 && autoCorners) {
+      // Show auto-detected as ghost
+      ctx.globalAlpha = 0.3
+      renderPaperCorners(ctx, autoCorners)
+      ctx.globalAlpha = 1
     }
-    octx.putImageData(imgData, 0, 0)
-    ctx.drawImage(overlayCanvas, 0, 0, canvas.width, canvas.height)
+  }, [imageData, corners, autoCorners])
 
-    // Draw contour outline
-    if (data.contourPx.length > 2) {
-      ctx.beginPath()
-      ctx.moveTo(data.contourPx[0].x * scale, data.contourPx[0].y * scale)
-      for (let i = 1; i < data.contourPx.length; i++) {
-        ctx.lineTo(data.contourPx[i].x * scale, data.contourPx[i].y * scale)
-      }
-      ctx.closePath()
-      ctx.strokeStyle = '#FFFFFF'
-      ctx.lineWidth = 2.5
-      ctx.stroke()
-      ctx.strokeStyle = '#8B6E4E'
-      ctx.lineWidth = 1.5
-      ctx.stroke()
-    }
-  }, [loaded, data])
+  const handleCanvasClick = (e) => {
+    if (corners.length >= 4) return
+    const rect = canvasRef.current.getBoundingClientRect()
+    const scaleX = imageData.drawW / rect.width
+    const scaleY = imageData.drawH / rect.height
+    const x = Math.round((e.clientX - rect.left) * scaleX)
+    const y = Math.round((e.clientY - rect.top) * scaleY)
+    setCorners(prev => [...prev, { x, y }])
+  }
 
-  const bounds = getContourBounds(contour)
-  const gridSize = snapToGrid(bounds, GRID_UNIT)
+  const useAutoCorners = () => {
+    if (autoCorners) setCorners(autoCorners)
+  }
+
+  const handleConfirm = () => {
+    const calib = calibrateFromCorners(corners)
+    if (calib) onCalibrated(calib)
+  }
 
   return (
-    <div className="creator-step-contour">
-      <div className="creator-step-header">
-        <div className="creator-step-number">2</div>
+    <div className="cr-step">
+      <div className="cr-step-head">
+        <div className="cr-step-num">2</div>
         <div>
-          <h4>Verification du contour</h4>
-          <p>Le contour de votre outil a ete detecte. Verifiez et ajustez si necessaire.</p>
+          <h4>Delimitez la feuille A4</h4>
+          <p>Cliquez sur les 4 coins de la feuille pour calibrer les mesures.</p>
         </div>
       </div>
 
-      <div className="creator-contour-canvas-wrap">
-        <canvas ref={canvasRef} className="creator-contour-canvas" />
+      <div className="cr-canvas-wrap">
+        <canvas ref={canvasRef} className="cr-canvas" onClick={handleCanvasClick} style={{ cursor: corners.length < 4 ? 'crosshair' : 'default' }} />
       </div>
 
-      <div className="creator-contour-controls">
-        <div className="creator-control-group">
-          <label>Marge autour</label>
-          <div className="creator-offset-btns">
-            {Object.keys(offsets).map(key => (
-              <button
-                key={key}
-                className={`creator-offset-btn ${offset === key ? 'active' : ''}`}
-                onClick={() => setOffset(key)}
-              >
-                {key === 'none' ? 'Aucune' : key === 'small' ? 'Petite' : key === 'medium' ? 'Moyenne' : 'Grande'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="creator-contour-info">
-          <div className="creator-info-item">
-            <span className="creator-info-label">Taille detectee</span>
-            <span className="creator-info-value">{Math.round(bounds.w)}mm x {Math.round(bounds.h)}mm</span>
-          </div>
-          <div className="creator-info-item">
-            <span className="creator-info-label">Grille requise</span>
-            <span className="creator-info-value pill pill-sm">{gridSize.w}x{gridSize.h} unites</span>
-          </div>
-        </div>
+      <div className="cr-info-row">
+        <span className="cr-info-badge">{corners.length}/4 coins</span>
+        {autoCorners && corners.length === 0 && (
+          <button className="cr-link-btn" onClick={useAutoCorners}>Detection auto</button>
+        )}
+        {corners.length > 0 && (
+          <button className="cr-link-btn" onClick={() => setCorners([])}>Recommencer</button>
+        )}
       </div>
 
-      <div className="creator-step-actions">
+      {corners.length === 4 && (
+        <div className="cr-calibration-info">
+          {(() => {
+            const calib = calibrateFromCorners(corners)
+            return calib ? (
+              <p>Echelle: <strong>{calib.pixelsPerMm.toFixed(2)} px/mm</strong> — Feuille detectee: {Math.round(calib.shortSidePx / calib.pixelsPerMm)}mm x {Math.round(calib.longSidePx / calib.pixelsPerMm)}mm</p>
+            ) : null
+          })()}
+        </div>
+      )}
+
+      <div className="cr-actions">
         <button className="btn btn-secondary" onClick={onBack}>← Retour</button>
-        <button className="btn btn-primary" onClick={() => onConfirm({ contour, gridSize, offset: offsets[offset] })}>
+        <button className="btn btn-primary" onClick={handleConfirm} disabled={corners.length !== 4}>
           Continuer →
         </button>
       </div>
@@ -239,92 +184,274 @@ function StepContour({ data, onConfirm, onBack }) {
   )
 }
 
-// ===== Step 3: 3D Preview + Save =====
-function GridfinityModule({ contourMm, gridW, gridH, depth }) {
-  const totalW = gridW * GRID_UNIT
-  const totalH = gridH * GRID_UNIT
-  const s = 0.01 // scale factor (mm to scene units)
-  const wallThickness = 1.2 // mm
-  const baseHeight = depth * GRID_UNIT * 0.5 // mm
+// ===== Step 3: Select Tool (Magic Wand / Vector Points) =====
+function StepSelect({ imageData, calibration, onContourReady, onBack }) {
+  const canvasRef = useRef(null)
+  const [mode, setMode] = useState('wand') // 'wand' | 'vector' | 'eraser'
+  const [mask, setMask] = useState(null)
+  const [vectorPoints, setVectorPoints] = useState([])
+  const [tolerance, setTolerance] = useState(45)
+  const [brushSize, setBrushSize] = useState(15)
 
-  // Create the base shape
-  const baseShape = new THREE.Shape()
-  baseShape.moveTo(0, 0)
-  baseShape.lineTo(totalW, 0)
-  baseShape.lineTo(totalW, totalH)
-  baseShape.lineTo(0, totalH)
-  baseShape.closePath()
+  const { drawW: w, drawH: h } = imageData
 
-  // Create cavity shape from contour (as a hole)
-  let cavityShape = null
-  if (contourMm.length >= 3) {
-    cavityShape = new THREE.Shape()
-    cavityShape.moveTo(contourMm[0].x, contourMm[0].y)
-    for (let i = 1; i < contourMm.length; i++) {
-      cavityShape.lineTo(contourMm[i].x, contourMm[i].y)
+  // Redraw
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    canvas.width = w
+    canvas.height = h
+
+    // Draw image
+    ctx.drawImage(imageData.img, 0, 0, w, h)
+
+    // Draw mask overlay
+    if (mask) {
+      renderMaskOverlay(ctx, mask, w, h, 139, 110, 78, 90)
+      // Draw contour outline
+      const contour = maskToContour(mask, w, h)
+      if (contour.length > 10) {
+        const simplified = simplifyContour(contour, 2)
+        renderContourOutline(ctx, simplified, '#FFFFFF', 2.5)
+        renderContourOutline(ctx, simplified, '#8B6E4E', 1.5)
+      }
     }
-    cavityShape.closePath()
+
+    // Draw vector points
+    if (mode === 'vector' && vectorPoints.length > 0) {
+      renderContourOutline(ctx, vectorPoints, '#8B6E4E', 2, vectorPoints.length >= 3)
+      renderControlPoints(ctx, vectorPoints)
+    }
+  }, [imageData, mask, vectorPoints, mode, w, h])
+
+  const handleCanvasClick = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect()
+    const scaleX = w / rect.width
+    const scaleY = h / rect.height
+    const x = Math.round((e.clientX - rect.left) * scaleX)
+    const y = Math.round((e.clientY - rect.top) * scaleY)
+
+    if (mode === 'wand') {
+      const newMask = mask
+        ? addToMask(imageData.ctx, w, h, mask, x, y, tolerance)
+        : magicWandSelect(imageData.ctx, w, h, x, y, tolerance)
+      setMask(newMask)
+    } else if (mode === 'eraser') {
+      if (mask) {
+        setMask(subtractFromMask(mask, w, h, x, y, brushSize))
+      }
+    } else if (mode === 'vector') {
+      setVectorPoints(prev => [...prev, { x, y }])
+    }
   }
 
-  // Create grid lines for the base
-  const gridLines = []
+  const handleMouseMove = (e) => {
+    if (mode !== 'eraser' || !e.buttons) return
+    const rect = canvasRef.current.getBoundingClientRect()
+    const scaleX = w / rect.width
+    const scaleY = h / rect.height
+    const x = Math.round((e.clientX - rect.left) * scaleX)
+    const y = Math.round((e.clientY - rect.top) * scaleY)
+    if (mask) setMask(subtractFromMask(mask, w, h, x, y, brushSize))
+  }
+
+  const applyVectorPoints = () => {
+    if (vectorPoints.length < 3) return
+    const polyMask = polygonToMask(vectorPoints, w, h)
+    setMask(polyMask)
+    setMode('wand')
+  }
+
+  const clearAll = () => {
+    setMask(null)
+    setVectorPoints([])
+  }
+
+  const handleConfirm = () => {
+    let finalMask = mask
+    if (!finalMask && vectorPoints.length >= 3) {
+      finalMask = polygonToMask(vectorPoints, w, h)
+    }
+    if (!finalMask) { alert('Selectionnez d\'abord l\'objet.'); return }
+
+    // Clean up mask
+    const cleaned = cleanMask(finalMask, w, h, 1, 1)
+
+    // Extract contour
+    const contourPx = maskToContour(cleaned, w, h)
+    if (contourPx.length < 10) { alert('Contour trop petit. Reessayez.'); return }
+    const simplified = simplifyContour(contourPx, 3)
+
+    // Convert to mm
+    const { pixelsPerMm } = calibration
+    // Origin = mask bounding box top-left
+    const bounds = getBounds(simplified)
+    const contourMm = contourToMm(simplified, pixelsPerMm, bounds.x, bounds.y)
+    const boundsMm = getBounds(contourMm)
+    const gridSize = snapToGrid(boundsMm.w, boundsMm.h, GRID_UNIT)
+    const centered = centerInGrid(contourMm, gridSize.w, gridSize.h, GRID_UNIT)
+
+    onContourReady({
+      contourMm: centered,
+      contourPx: simplified,
+      gridSize,
+      boundsMm,
+      mask: cleaned,
+    })
+  }
+
+  const cursorStyle = mode === 'wand' ? 'crosshair' : mode === 'eraser' ? 'cell' : 'crosshair'
+
+  return (
+    <div className="cr-step">
+      <div className="cr-step-head">
+        <div className="cr-step-num">3</div>
+        <div>
+          <h4>Selectionnez l'objet</h4>
+          <p>Utilisez les outils pour detourer votre objet sur la photo.</p>
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div className="cr-toolbar">
+        <button className={`cr-tool ${mode === 'wand' ? 'active' : ''}`} onClick={() => setMode('wand')} title="Baguette magique">
+          <span>✨</span> Baguette
+        </button>
+        <button className={`cr-tool ${mode === 'vector' ? 'active' : ''}`} onClick={() => setMode('vector')} title="Points vectoriels">
+          <span>📐</span> Points
+        </button>
+        <button className={`cr-tool ${mode === 'eraser' ? 'active' : ''}`} onClick={() => setMode('eraser')} title="Gomme">
+          <span>🧹</span> Gomme
+        </button>
+        <div className="cr-tool-sep" />
+        <button className="cr-tool" onClick={clearAll} title="Tout effacer">
+          <span>🗑️</span> Reset
+        </button>
+      </div>
+
+      {/* Tool options */}
+      <div className="cr-tool-options">
+        {mode === 'wand' && (
+          <div className="cr-option">
+            <label>Tolerance: {tolerance}</label>
+            <input type="range" min={10} max={100} value={tolerance} onChange={e => setTolerance(Number(e.target.value))} />
+            <p className="cr-option-hint">Cliquez sur l'objet. Chaque clic ajoute a la selection.</p>
+          </div>
+        )}
+        {mode === 'vector' && (
+          <div className="cr-option">
+            <p className="cr-option-hint">Cliquez autour de l'objet pour placer des points. Min 3 points.</p>
+            {vectorPoints.length >= 3 && (
+              <button className="btn btn-sm btn-secondary" onClick={applyVectorPoints}>
+                Appliquer les {vectorPoints.length} points
+              </button>
+            )}
+          </div>
+        )}
+        {mode === 'eraser' && (
+          <div className="cr-option">
+            <label>Taille: {brushSize}px</label>
+            <input type="range" min={5} max={50} value={brushSize} onChange={e => setBrushSize(Number(e.target.value))} />
+            <p className="cr-option-hint">Cliquez/glissez pour effacer des zones de la selection.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Canvas */}
+      <div className="cr-canvas-wrap">
+        <canvas
+          ref={canvasRef}
+          className="cr-canvas"
+          onClick={handleCanvasClick}
+          onMouseMove={handleMouseMove}
+          style={{ cursor: cursorStyle }}
+        />
+      </div>
+
+      {mask && (
+        <div className="cr-info-row">
+          <span className="cr-info-badge">Selection active</span>
+        </div>
+      )}
+
+      <div className="cr-actions">
+        <button className="btn btn-secondary" onClick={onBack}>← Retour</button>
+        <button className="btn btn-primary" onClick={handleConfirm} disabled={!mask && vectorPoints.length < 3}>
+          Continuer →
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ===== Step 4: 3D Preview + Save =====
+function GridfinityModule3D({ contourMm, gridW, gridH, depth }) {
+  const totalW = gridW * GRID_UNIT
+  const totalH = gridH * GRID_UNIT
+  const s = 0.01
+  const wallT = 1.2
+  const baseH = depth * GRID_UNIT * 0.5
+
+  // Grid walls
+  const walls = []
   for (let i = 0; i <= gridW; i++) {
-    gridLines.push(
-      <mesh key={`vl${i}`} position={[i * GRID_UNIT * s - totalW * s / 2, baseHeight * s / 2, 0]}>
-        <boxGeometry args={[wallThickness * s, baseHeight * s, totalH * s]} />
+    walls.push(
+      <mesh key={`v${i}`} position={[i * GRID_UNIT * s - totalW * s / 2, baseH * s / 2, 0]}>
+        <boxGeometry args={[wallT * s, baseH * s, totalH * s]} />
         <meshStandardMaterial color="#B8A08A" />
       </mesh>
     )
   }
   for (let j = 0; j <= gridH; j++) {
-    gridLines.push(
-      <mesh key={`hl${j}`} position={[0, baseHeight * s / 2, j * GRID_UNIT * s - totalH * s / 2]}>
-        <boxGeometry args={[totalW * s, baseHeight * s, wallThickness * s]} />
+    walls.push(
+      <mesh key={`h${j}`} position={[0, baseH * s / 2, j * GRID_UNIT * s - totalH * s / 2]}>
+        <boxGeometry args={[totalW * s, baseH * s, wallT * s]} />
         <meshStandardMaterial color="#B8A08A" />
+      </mesh>
+    )
+  }
+
+  // Tool cavity shape
+  let cavityMesh = null
+  if (contourMm.length >= 3) {
+    const shape = new THREE.Shape()
+    shape.moveTo(contourMm[0].x, contourMm[0].y)
+    for (let i = 1; i < contourMm.length; i++) {
+      shape.lineTo(contourMm[i].x, contourMm[i].y)
+    }
+    shape.closePath()
+
+    cavityMesh = (
+      <mesh position={[-totalW * s / 2, baseH * s + 1 * s, -totalH * s / 2]} rotation={[-Math.PI / 2, 0, 0]}>
+        <extrudeGeometry args={[shape, { steps: 1, depth: baseH * s * 0.8, bevelEnabled: false }]} />
+        <meshStandardMaterial color="#C8956C" side={THREE.DoubleSide} />
       </mesh>
     )
   }
 
   return (
     <group>
-      {/* Base plate */}
       <mesh position={[0, 1 * s, 0]}>
         <boxGeometry args={[totalW * s, 2 * s, totalH * s]} />
         <meshStandardMaterial color="#D4C4B0" />
       </mesh>
-
-      {/* Grid walls */}
-      {gridLines}
-
-      {/* Tool cavity (extruded shape) */}
-      {cavityShape && (
-        <mesh
-          position={[-totalW * s / 2, baseHeight * s + 1 * s, -totalH * s / 2]}
-          rotation={[-Math.PI / 2, 0, 0]}
-        >
-          <extrudeGeometry args={[cavityShape, {
-            steps: 1,
-            depth: baseHeight * s * 0.8,
-            bevelEnabled: false,
-          }]} />
-          <meshStandardMaterial color="#C8956C" side={THREE.DoubleSide} />
-        </mesh>
-      )}
+      {walls}
+      {cavityMesh}
     </group>
   )
 }
 
-function StepPreview({ contour, gridSize, offset, onBack, onSave }) {
+function StepPreview({ contourData, onBack, onSave }) {
   const [name, setName] = useState('')
   const [depth, setDepth] = useState(1)
-  const [saving, setSaving] = useState(false)
-  const [viewMode, setViewMode] = useState('3d') // '3d' or 'top'
+  const [viewMode, setViewMode] = useState('3d')
+
+  const { contourMm, gridSize, boundsMm } = contourData
 
   const handleSave = () => {
     if (!name.trim()) return
-    setSaving(true)
-
-    const moduleData = {
+    const mod = {
       id: 'custom_' + Date.now(),
       name: name.trim(),
       icon: '🔧',
@@ -335,218 +462,137 @@ function StepPreview({ contour, gridSize, offset, onBack, onSave }) {
       color: '#8B6E4E',
       category: 'custom',
       isCustom: true,
-      contour: contour,
-      offset: offset,
+      contour: contourMm,
       createdAt: new Date().toISOString(),
     }
-
-    addModule(moduleData)
-    onSave(moduleData)
+    addModule(mod)
+    onSave(mod)
   }
 
   return (
-    <div className="creator-step-preview">
-      <div className="creator-step-header">
-        <div className="creator-step-number">3</div>
+    <div className="cr-step">
+      <div className="cr-step-head">
+        <div className="cr-step-num">4</div>
         <div>
           <h4>Apercu du module</h4>
-          <p>Votre module Gridfinity sur mesure est pret.</p>
+          <p>Votre module Gridfinity {gridSize.w}x{gridSize.h} est pret.</p>
         </div>
       </div>
 
-      <div className="creator-3d-viewport">
-        <div className="creator-viewport-tabs">
-          <button
-            className={`creator-vtab ${viewMode === '3d' ? 'active' : ''}`}
-            onClick={() => setViewMode('3d')}
-          >
-            Vue 3D
-          </button>
-          <button
-            className={`creator-vtab ${viewMode === 'top' ? 'active' : ''}`}
-            onClick={() => setViewMode('top')}
-          >
-            Vue dessus
-          </button>
+      <div className="cr-viewport">
+        <div className="cr-vtabs">
+          <button className={`cr-vtab ${viewMode === '3d' ? 'active' : ''}`} onClick={() => setViewMode('3d')}>Vue 3D</button>
+          <button className={`cr-vtab ${viewMode === 'top' ? 'active' : ''}`} onClick={() => setViewMode('top')}>Vue dessus</button>
         </div>
         <Canvas
-          camera={{
-            position: viewMode === 'top' ? [0, 5, 0] : [3, 3, 3],
-            fov: 40,
-          }}
-          style={{ background: '#F5F1EC', borderRadius: '0 0 12px 12px' }}
+          camera={{ position: viewMode === 'top' ? [0, 5, 0] : [3, 3, 3], fov: 40 }}
+          style={{ background: '#F5F1EC', borderRadius: '0 0 12px 12px', height: '260px' }}
         >
           <ambientLight intensity={0.6} />
           <directionalLight position={[5, 8, 5]} intensity={0.8} />
-          <GridfinityModule
-            contourMm={contour}
-            gridW={gridSize.w}
-            gridH={gridSize.h}
-            depth={depth}
-          />
-          <OrbitControls
-            enablePan={false}
-            maxPolarAngle={viewMode === 'top' ? 0.01 : Math.PI / 2}
-          />
+          <GridfinityModule3D contourMm={contourMm} gridW={gridSize.w} gridH={gridSize.h} depth={depth} />
+          <OrbitControls enablePan={false} maxPolarAngle={viewMode === 'top' ? 0.01 : Math.PI / 2} />
         </Canvas>
-        <div className="creator-viewport-info">
-          {gridSize.w}x{gridSize.h} Grille — {gridSize.w * GRID_UNIT}mm x {gridSize.h * GRID_UNIT}mm
-        </div>
+        <div className="cr-viewport-info">{gridSize.w}x{gridSize.h} Grille — {gridSize.w * GRID_UNIT}mm x {gridSize.h * GRID_UNIT}mm</div>
       </div>
 
-      <div className="creator-save-form">
-        <div className="creator-field">
+      <div className="cr-form">
+        <div className="cr-field">
           <label>Nom du module</label>
-          <input
-            type="text"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="Ex: Pince, Marteau, Tournevis..."
-          />
+          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Pince, Casque, Tournevis..." />
         </div>
 
-        <div className="creator-field">
-          <label>Profondeur (unites)</label>
-          <div className="creator-depth-btns">
+        <div className="cr-field">
+          <label>Profondeur</label>
+          <div className="cr-depth-btns">
             {[1, 2, 3, 4].map(d => (
-              <button
-                key={d}
-                className={`creator-depth-btn ${depth === d ? 'active' : ''}`}
-                onClick={() => setDepth(d)}
-              >
-                {d}u ({d * GRID_UNIT * 0.5}mm)
+              <button key={d} className={`cr-depth-btn ${depth === d ? 'active' : ''}`} onClick={() => setDepth(d)}>
+                {d}u
               </button>
             ))}
           </div>
         </div>
 
-        <div className="creator-contour-info">
-          <div className="creator-info-item">
-            <span className="creator-info-label">Taille grille</span>
-            <span className="creator-info-value">{gridSize.w}x{gridSize.h} unites</span>
+        <div className="cr-info-grid">
+          <div className="cr-info-cell">
+            <span className="cr-info-label">Taille reelle</span>
+            <span className="cr-info-val">{Math.round(boundsMm.w)}x{Math.round(boundsMm.h)}mm</span>
           </div>
-          <div className="creator-info-item">
-            <span className="creator-info-label">Dimensions</span>
-            <span className="creator-info-value">{gridSize.w * GRID_UNIT}mm x {gridSize.h * GRID_UNIT}mm</span>
+          <div className="cr-info-cell">
+            <span className="cr-info-label">Grille</span>
+            <span className="cr-info-val">{gridSize.w}x{gridSize.h} unites</span>
           </div>
-          <div className="creator-info-item">
-            <span className="creator-info-label">Points contour</span>
-            <span className="creator-info-value">{contour.length}</span>
+          <div className="cr-info-cell">
+            <span className="cr-info-label">Points</span>
+            <span className="cr-info-val">{contourMm.length}</span>
           </div>
         </div>
       </div>
 
-      <div className="creator-step-actions">
+      <div className="cr-actions">
         <button className="btn btn-secondary" onClick={onBack}>← Retour</button>
-        <button className="btn btn-primary" onClick={handleSave} disabled={!name.trim() || saving}>
-          Sauvegarder le module
-        </button>
+        <button className="btn btn-primary" onClick={handleSave} disabled={!name.trim()}>Sauvegarder</button>
       </div>
     </div>
   )
 }
 
-// ===== Step 4: Done =====
+// ===== Step 5: Done =====
 function StepDone({ moduleData, onClose, onReset }) {
   return (
-    <div className="creator-step-done">
-      <div className="creator-done-icon">✅</div>
+    <div className="cr-done">
+      <div className="cr-done-icon">✅</div>
       <h4>Module "{moduleData.name}" cree !</h4>
-      <p className="creator-desc">
-        Votre module sur mesure ({moduleData.w}x{moduleData.d} unites) est disponible dans le catalogue
-        sous la categorie "Personnalise".
-      </p>
-      <p className="creator-desc-sub">
-        Vous pouvez le placer sur votre grille depuis le catalogue de modules.
-      </p>
-      <div className="creator-done-actions">
-        <button className="btn btn-primary btn-block" onClick={onReset}>
-          Creer un autre module
-        </button>
-        <button className="btn btn-secondary btn-block" onClick={onClose} style={{ marginTop: '0.5rem' }}>
-          Fermer
-        </button>
+      <p>Votre module sur mesure ({moduleData.w}x{moduleData.d} unites) est disponible dans le catalogue sous "Personnalise".</p>
+      <p className="cr-done-sub">Placez-le sur votre grille depuis le catalogue de modules.</p>
+      <div className="cr-done-btns">
+        <button className="btn btn-primary btn-block" onClick={onReset}>Creer un autre module</button>
+        <button className="btn btn-secondary btn-block" onClick={onClose} style={{ marginTop: '0.5rem' }}>Fermer</button>
       </div>
     </div>
   )
 }
 
-// ===== Main Creator Component =====
+// ===== Main =====
 export default function ModuleCreator({ onClose }) {
-  const [step, setStep] = useState(1) // 1: upload, 2: contour, 3: preview, 4: done
-  const [processedData, setProcessedData] = useState(null)
-  const [confirmedData, setConfirmedData] = useState(null)
+  const [step, setStep] = useState(1)
+  const [imageData, setImageData] = useState(null)
+  const [calibration, setCalibration] = useState(null)
+  const [contourData, setContourData] = useState(null)
   const [savedModule, setSavedModule] = useState(null)
 
-  // Ensure "custom" category exists
+  // Ensure custom category exists
   useEffect(() => {
     const cats = getCategories()
     if (!cats.find(c => c.id === 'custom')) {
-      addCategory({
-        id: 'custom',
-        name: 'Personnalise',
-        icon: '🔧',
-        description: 'Vos modules sur mesure crees a partir de photos.',
-        slug: 'personnalise',
-      })
+      addCategory({ id: 'custom', name: 'Personnalise', icon: '🔧', description: 'Vos modules sur mesure.', slug: 'personnalise' })
     }
   }, [])
 
-  const handlePhotoReady = useCallback((data) => {
-    setProcessedData(data)
-    setStep(2)
-  }, [])
+  const reset = () => { setStep(1); setImageData(null); setCalibration(null); setContourData(null); setSavedModule(null) }
 
-  const handleContourConfirm = useCallback(({ contour, gridSize, offset }) => {
-    setConfirmedData({ contour, gridSize, offset })
-    setStep(3)
-  }, [])
-
-  const handleSave = useCallback((moduleData) => {
-    setSavedModule(moduleData)
-    setStep(4)
-  }, [])
-
-  const handleReset = useCallback(() => {
-    setStep(1)
-    setProcessedData(null)
-    setConfirmedData(null)
-    setSavedModule(null)
-  }, [])
+  const stepLabels = ['Photo', 'Feuille A4', 'Selection', 'Apercu']
 
   return (
     <div className="creator-content">
-      {/* Progress bar */}
-      <div className="creator-progress">
-        <div className="creator-progress-steps">
-          {['Photo', 'Contour', 'Apercu'].map((label, i) => (
-            <div key={i} className={`creator-progress-step ${step > i + 1 ? 'done' : ''} ${step === i + 1 ? 'active' : ''}`}>
-              <div className="creator-progress-dot">{step > i + 1 ? '✓' : i + 1}</div>
+      {/* Progress */}
+      <div className="cr-progress">
+        <div className="cr-progress-steps">
+          {stepLabels.map((label, i) => (
+            <div key={i} className={`cr-prog-step ${step > i + 1 ? 'done' : ''} ${step === i + 1 ? 'active' : ''}`}>
+              <div className="cr-prog-dot">{step > i + 1 ? '✓' : i + 1}</div>
               <span>{label}</span>
             </div>
           ))}
         </div>
-        <div className="creator-progress-bar">
-          <div className="creator-progress-fill" style={{ width: `${((step - 1) / 3) * 100}%` }} />
-        </div>
+        <div className="cr-prog-bar"><div className="cr-prog-fill" style={{ width: `${((step - 1) / 4) * 100}%` }} /></div>
       </div>
 
-      {step === 1 && <StepUpload onPhotoReady={handlePhotoReady} />}
-      {step === 2 && processedData && (
-        <StepContour data={processedData} onConfirm={handleContourConfirm} onBack={() => setStep(1)} />
-      )}
-      {step === 3 && confirmedData && (
-        <StepPreview
-          contour={confirmedData.contour}
-          gridSize={confirmedData.gridSize}
-          offset={confirmedData.offset}
-          onBack={() => setStep(2)}
-          onSave={handleSave}
-        />
-      )}
-      {step === 4 && savedModule && (
-        <StepDone moduleData={savedModule} onClose={onClose} onReset={handleReset} />
-      )}
+      {step === 1 && <StepUpload onPhotoLoaded={(d) => { setImageData(d); setStep(2) }} />}
+      {step === 2 && imageData && <StepPaper imageData={imageData} onCalibrated={(c) => { setCalibration(c); setStep(3) }} onBack={() => setStep(1)} />}
+      {step === 3 && imageData && calibration && <StepSelect imageData={imageData} calibration={calibration} onContourReady={(d) => { setContourData(d); setStep(4) }} onBack={() => setStep(2)} />}
+      {step === 4 && contourData && <StepPreview contourData={contourData} onBack={() => setStep(3)} onSave={(m) => { setSavedModule(m); setStep(5) }} />}
+      {step === 5 && savedModule && <StepDone moduleData={savedModule} onClose={onClose} onReset={reset} />}
     </div>
   )
 }
