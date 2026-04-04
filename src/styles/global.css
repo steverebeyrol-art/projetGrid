@@ -1925,15 +1925,13 @@ body {
 .creator-open-btn { border-style: dashed !important; }
 .creator-open-btn:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
 
-.modal-creator { max-width: 95vw; width: 1050px; max-height: 92vh; overflow-y: auto; }
-.modal-creator-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border); }
+.modal-creator { max-width: 95vw; width: 1050px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; padding: 1.25rem 1.5rem; }
+.modal-creator-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .modal-creator-header h3 { margin: 0; font-size: 1.1rem; }
 .modal-close-btn { background: none; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer; padding: 0.25rem 0.4rem; border-radius: var(--radius-sm); transition: all var(--transition); }
 .modal-close-btn:hover { color: var(--text-primary); background: var(--bg-input); }
-.creator-content {}
-
 /* Progress */
-.cr-progress { margin-bottom: 1.25rem; }
+.cr-progress { margin-bottom: 1rem; flex-shrink: 0; }
 .cr-progress-steps { display: flex; justify-content: space-between; margin-bottom: 0.5rem; }
 .cr-prog-step { display: flex; align-items: center; gap: 0.35rem; font-size: 0.7rem; color: var(--text-muted); }
 .cr-prog-step.active { color: var(--accent); font-weight: 600; }
@@ -1946,25 +1944,26 @@ body {
 
 /* Step layout */
 /* Split layout: options left, canvas/3D right */
-.cr-split { display: flex; gap: 1rem; min-height: 380px; }
-.cr-split-left { flex: 0 0 260px; display: flex; flex-direction: column; }
-.cr-split-right { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.cr-split-right .cr-canvas-wrap { flex: 1; margin-bottom: 0; min-height: 0; }
-.cr-split-right .cr-canvas { width: 100%; height: 100%; object-fit: contain; }
-.cr-split-right .cr-viewport { flex: 1; display: flex; flex-direction: column; }
-.cr-split-right .cr-viewport canvas { flex: 1; }
+.creator-content { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.cr-split { display: flex; gap: 1rem; flex: 1; min-height: 0; }
+.cr-split-left { flex: 0 0 240px; display: flex; flex-direction: column; overflow-y: auto; }
+.cr-split-right { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+.cr-split-right .cr-canvas-wrap { flex: 1; margin-bottom: 0; min-height: 0; overflow: hidden; }
+.cr-split-right .cr-canvas { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.cr-split-right .cr-viewport { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.cr-split-right .cr-viewport canvas { flex: 1; min-height: 0; }
 @media (max-width: 700px) {
   .cr-split { flex-direction: column; min-height: auto; }
   .cr-split-left { flex: none; }
   .modal-creator { width: auto; max-width: 95vw; }
 }
 
-.cr-step {}
-.cr-step-head { display: flex; gap: 0.7rem; align-items: flex-start; margin-bottom: 1rem; }
+.cr-step { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.cr-step-head { display: flex; gap: 0.7rem; align-items: flex-start; margin-bottom: 0.75rem; flex-shrink: 0; }
 .cr-step-num { width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem; flex-shrink: 0; }
 .cr-step-head h4 { margin: 0 0 0.1rem; font-size: 0.92rem; }
 .cr-step-head p { margin: 0; font-size: 0.75rem; color: var(--text-muted); line-height: 1.4; }
-.cr-actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
+.cr-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-shrink: 0; }
 .cr-actions .btn { flex: 1; }
 
 /* Dropzone */
@@ -1986,8 +1985,8 @@ body {
 .cr-tips li::before { content: '• '; color: var(--accent); }
 
 /* Canvas */
-.cr-canvas-wrap { background: #1a1a1a; border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 0.75rem; display: flex; justify-content: center; min-height: 180px; }
-.cr-canvas { max-width: 100%; display: block; }
+.cr-canvas-wrap { background: #1a1a1a; border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 0; display: flex; justify-content: center; align-items: center; }
+.cr-canvas { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 
 /* Info row */
 .cr-info-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
