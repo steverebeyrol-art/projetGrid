@@ -1958,6 +1958,9 @@ body {
 .cr-dropzone:hover, .cr-dropzone.over { border-color: var(--accent); background: rgba(139,110,78,0.05); }
 .cr-dropzone.loading { cursor: wait; border-color: var(--accent); }
 .cr-drop-icon { font-size: 2rem; }
+.cr-upload-btns { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+.cr-upload-btn { padding: 0.45rem 0.8rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); color: var(--text-primary); font-size: 0.78rem; font-family: inherit; cursor: pointer; transition: all var(--transition); }
+.cr-upload-btn:hover { border-color: var(--accent); color: var(--accent); }
 .cr-spinner { width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

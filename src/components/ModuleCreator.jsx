@@ -29,6 +29,7 @@ const GRID_UNIT = 42
 // ===== Step 1: Upload Photo =====
 function StepUpload({ onPhotoLoaded }) {
   const fileRef = useRef(null)
+  const cameraRef = useRef(null)
   const [dragOver, setDragOver] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -63,7 +64,6 @@ function StepUpload({ onPhotoLoaded }) {
 
       <div
         className={`cr-dropzone ${dragOver ? 'over' : ''} ${loading ? 'loading' : ''}`}
-        onClick={() => !loading && fileRef.current?.click()}
         onDragOver={e => { e.preventDefault(); setDragOver(true) }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
@@ -71,11 +71,25 @@ function StepUpload({ onPhotoLoaded }) {
         {loading ? (
           <><div className="cr-spinner" /><p>Chargement...</p></>
         ) : (
-          <><span className="cr-drop-icon">📁</span><p><strong>Parcourir</strong> ou glisser-deposer</p></>
+          <>
+            <span className="cr-drop-icon">📁</span>
+            <p>Glisser-deposer une image ici</p>
+            <div className="cr-upload-btns">
+              <button className="cr-upload-btn" onClick={() => fileRef.current?.click()}>
+                🖼️ Choisir un fichier
+              </button>
+              <button className="cr-upload-btn" onClick={() => cameraRef.current?.click()}>
+                📸 Prendre une photo
+              </button>
+            </div>
+          </>
         )}
       </div>
 
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+      {/* File picker (gallery/files) - no capture attribute */}
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+      {/* Camera capture */}
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
 
       <div className="cr-tips">
         <p className="cr-tips-title">Conseils pour de bons resultats :</p>
