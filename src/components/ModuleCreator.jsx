@@ -210,16 +210,29 @@ function StepPaper({ imageData, onCalibrated, onBack }) {
 }
 
 // ===== Step 3: Select Tool (Vector Points) =====
+// Shape colors for multi-object display
+const SHAPE_COLORS = [
+  { fill: 'rgba(139, 110, 78, 0.15)', stroke: '#8B6E4E', point: '#8B6E4E' },
+  { fill: 'rgba(78, 110, 139, 0.15)', stroke: '#4E6E8B', point: '#4E6E8B' },
+  { fill: 'rgba(110, 139, 78, 0.15)', stroke: '#6E8B4E', point: '#6E8B4E' },
+  { fill: 'rgba(139, 78, 110, 0.15)', stroke: '#8B4E6E', point: '#8B4E6E' },
+  { fill: 'rgba(139, 120, 50, 0.15)', stroke: '#8B7832', point: '#8B7832' },
+]
+
 function StepSelect({ imageData, calibration, onContourReady, onBack }) {
   const canvasRef = useRef(null)
   const wrapRef = useRef(null)
-  const [vectorPoints, setVectorPoints] = useState([])
-  const [tool, setTool] = useState('add') // 'add' | 'move' | 'insert' | 'delete'
+
+  // Multi-shape state
+  const [shapes, setShapes] = useState([{ id: 1, points: [], validated: false }])
+  const [activeIdx, setActiveIdx] = useState(0)
+  const nextId = useRef(2)
+
+  const [tool, setTool] = useState('add')
   const [dragIdx, setDragIdx] = useState(-1)
   const [hoverSegment, setHoverSegment] = useState(-1)
   const [hoverPos, setHoverPos] = useState(null)
   const [margin, setMargin] = useState(5)
-  const [validated, setValidated] = useState(false)
 
   // Zoom & pan
   const [zoom, setZoom] = useState(1)
@@ -231,6 +244,21 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
   const POINT_RADIUS = 8
   const HIT_RADIUS = 12
   const SEGMENT_HIT_DIST = 8
+
+  // Current active shape
+  const activeShape = shapes[activeIdx]
+  const vectorPoints = activeShape ? activeShape.points : []
+  const isActiveValidated = activeShape ? activeShape.validated : false
+
+  // Update points for the active shape
+  const setVectorPoints = (updater) => {
+    setShapes(prev => {
+      const next = [...prev]
+      const pts = typeof updater === 'function' ? updater(next[activeIdx].points) : updater
+      next[activeIdx] = { ...next[activeIdx], points: pts }
+      return next
+    })
+  }
 
   // Convert mouse event to image coordinates (accounting for zoom+pan)
   const getCanvasXY = (e) => {
@@ -275,7 +303,42 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
     return bestDist <= SEGMENT_HIT_DIST ? { idx: bestIdx, pos: bestPos } : { idx: -1, pos: null }
   }
 
-  // Redraw canvas with zoom+pan
+  // Dessiner une forme sur le canvas
+  const drawShape = (ctx, pts, colorSet, isActive, lw, pr) => {
+    if (pts.length === 0) return
+    // Remplissage polygon
+    if (pts.length >= 3) {
+      ctx.beginPath()
+      ctx.moveTo(pts[0].x, pts[0].y)
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y)
+      ctx.closePath()
+      ctx.fillStyle = colorSet.fill
+      ctx.fill()
+    }
+    // Contour
+    renderContourOutline(ctx, pts, '#FFFFFF', 3 * lw, pts.length >= 3)
+    renderContourOutline(ctx, pts, colorSet.stroke, 1.5 * lw, pts.length >= 3)
+    // Points (seulement si forme active)
+    if (isActive) {
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i]
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, pr, 0, Math.PI * 2)
+        ctx.fillStyle = dragIdx === i ? colorSet.point : '#FFFFFF'
+        ctx.fill()
+        ctx.strokeStyle = colorSet.point
+        ctx.lineWidth = 2 / zoom
+        ctx.stroke()
+        ctx.fillStyle = dragIdx === i ? '#FFFFFF' : colorSet.point
+        ctx.font = `bold ${Math.round(9 / zoom)}px sans-serif`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(String(i + 1), p.x, p.y)
+      }
+    }
+  }
+
+  // Redessin du canvas avec zoom+pan + toutes les formes
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -286,60 +349,38 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
     ctx.save()
     ctx.translate(pan.x, pan.y)
     ctx.scale(zoom, zoom)
-
-    // Draw image
     ctx.drawImage(imageData.img, 0, 0, w, h)
 
-    if (vectorPoints.length > 0) {
-      // Draw filled polygon with semi-transparent overlay
-      if (vectorPoints.length >= 3) {
-        ctx.beginPath()
-        ctx.moveTo(vectorPoints[0].x, vectorPoints[0].y)
-        for (let i = 1; i < vectorPoints.length; i++) ctx.lineTo(vectorPoints[i].x, vectorPoints[i].y)
-        ctx.closePath()
-        ctx.fillStyle = 'rgba(139, 110, 78, 0.15)'
-        ctx.fill()
-      }
+    const lw = 1 / zoom
+    const pr = POINT_RADIUS / zoom
 
-      // Draw outline (scale-independent line width)
-      const lw = 1 / zoom
-      renderContourOutline(ctx, vectorPoints, '#FFFFFF', 3 * lw, vectorPoints.length >= 3)
-      renderContourOutline(ctx, vectorPoints, '#8B6E4E', 1.5 * lw, vectorPoints.length >= 3)
+    // Dessiner les formes inactives d'abord (pas de points)
+    shapes.forEach((shape, idx) => {
+      if (idx === activeIdx) return
+      const colors = SHAPE_COLORS[idx % SHAPE_COLORS.length]
+      drawShape(ctx, shape.points, colors, false, lw, pr)
+    })
+    // Dessiner la forme active en dernier (avec points)
+    if (activeShape) {
+      const colors = SHAPE_COLORS[activeIdx % SHAPE_COLORS.length]
+      drawShape(ctx, activeShape.points, colors, true, lw, pr)
+    }
 
-      // Draw points (scale-independent size)
-      const pr = POINT_RADIUS / zoom
-      for (let i = 0; i < vectorPoints.length; i++) {
-        const p = vectorPoints[i]
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, pr, 0, Math.PI * 2)
-        ctx.fillStyle = dragIdx === i ? '#8B6E4E' : '#FFFFFF'
-        ctx.fill()
-        ctx.strokeStyle = '#8B6E4E'
-        ctx.lineWidth = 2 / zoom
-        ctx.stroke()
-        ctx.fillStyle = dragIdx === i ? '#FFFFFF' : '#8B6E4E'
-        ctx.font = `bold ${Math.round(9 / zoom)}px sans-serif`
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(String(i + 1), p.x, p.y)
-      }
-
-      // Draw insert preview on hovered segment
-      if (hoverSegment >= 0 && hoverPos && dragIdx < 0) {
-        ctx.beginPath()
-        ctx.arc(hoverPos.x, hoverPos.y, 6 / zoom, 0, Math.PI * 2)
-        ctx.fillStyle = 'rgba(139, 110, 78, 0.5)'
-        ctx.fill()
-        ctx.strokeStyle = '#8B6E4E'
-        ctx.lineWidth = 1.5 / zoom
-        ctx.setLineDash([3 / zoom, 3 / zoom])
-        ctx.stroke()
-        ctx.setLineDash([])
-      }
+    // Apercu d'insertion sur segment
+    if (hoverSegment >= 0 && hoverPos && dragIdx < 0) {
+      ctx.beginPath()
+      ctx.arc(hoverPos.x, hoverPos.y, 6 / zoom, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(139, 110, 78, 0.5)'
+      ctx.fill()
+      ctx.strokeStyle = '#8B6E4E'
+      ctx.lineWidth = 1.5 / zoom
+      ctx.setLineDash([3 / zoom, 3 / zoom])
+      ctx.stroke()
+      ctx.setLineDash([])
     }
 
     ctx.restore()
-  }, [imageData, vectorPoints, w, h, dragIdx, hoverSegment, hoverPos, zoom, pan])
+  }, [imageData, shapes, activeIdx, w, h, dragIdx, hoverSegment, hoverPos, zoom, pan])
 
   // Zoom helpers
   const zoomIn = () => setZoom(z => Math.min(5, z + 0.5))
@@ -382,7 +423,7 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
       return
     }
 
-    if (validated) return
+    if (isActiveValidated) return
     const { x, y } = getCanvasXY(e)
 
     if (tool === 'add') {
@@ -434,7 +475,7 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
       return
     }
 
-    if (validated) return
+    if (isActiveValidated) return
 
     if (tool === 'insert' && vectorPoints.length >= 2) {
       const { idx, pos } = findSegmentAt(x, y)
@@ -453,7 +494,7 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
   // Right click always deletes (shortcut)
   const handleContextMenu = (e) => {
     e.preventDefault()
-    if (validated) return
+    if (isActiveValidated) return
     const { x, y } = getCanvasXY(e)
     const ptIdx = findPointAt(x, y)
     if (ptIdx >= 0) {
@@ -463,46 +504,110 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
 
   const cursorForTool = { add: 'crosshair', move: dragIdx >= 0 ? 'grabbing' : 'grab', insert: 'copy', delete: 'pointer' }
 
-  const clearAll = () => {
+  // Effacer la forme active
+  const clearActiveShape = () => {
     setVectorPoints([])
-    setValidated(false)
+    setShapes(prev => {
+      const next = [...prev]
+      next[activeIdx] = { ...next[activeIdx], validated: false }
+      return next
+    })
   }
 
-  const handleValidate = () => {
+  // Valider la forme active
+  const handleValidateShape = () => {
     if (vectorPoints.length < 3) { alert('Minimum 3 points requis.'); return }
-    setValidated(true)
+    setShapes(prev => {
+      const next = [...prev]
+      next[activeIdx] = { ...next[activeIdx], validated: true }
+      return next
+    })
   }
 
-  const handleModify = () => {
-    setValidated(false)
+  // Modifier la forme active (devalider)
+  const handleModifyShape = () => {
+    setShapes(prev => {
+      const next = [...prev]
+      next[activeIdx] = { ...next[activeIdx], validated: false }
+      return next
+    })
   }
 
-  const handleConfirm = () => {
-    if (vectorPoints.length < 3) { alert('Minimum 3 points requis.'); return }
+  // Ajouter un nouvel objet
+  const addNewShape = () => {
+    const newShape = { id: nextId.current++, points: [], validated: false }
+    setShapes(prev => [...prev, newShape])
+    setActiveIdx(shapes.length)
+    setTool('add')
+  }
 
-    // Use vector points directly as contour (with optional margin via dilation)
-    let contourPx = vectorPoints
-    if (margin > 0) {
-      // Create mask from polygon, dilate, extract contour
-      const polyMask = polygonToMask(vectorPoints, w, h)
-      const expanded = dilateMask(polyMask, w, h, margin)
-      const cleaned = cleanMask(expanded, w, h, 1, 1)
-      const extracted = maskToContour(cleaned, w, h, 180)
-      if (extracted.length >= 5) {
-        contourPx = simplifyContour(extracted, 2)
-      }
+  // Selectionner une forme
+  const selectShape = (idx) => {
+    setActiveIdx(idx)
+    setDragIdx(-1)
+    setHoverSegment(-1)
+    setHoverPos(null)
+  }
+
+  // Supprimer une forme
+  const deleteShape = (idx) => {
+    if (shapes.length <= 1) {
+      clearActiveShape()
+      return
     }
+    setShapes(prev => prev.filter((_, i) => i !== idx))
+    if (activeIdx >= idx && activeIdx > 0) setActiveIdx(activeIdx - 1)
+    else if (activeIdx >= shapes.length - 1) setActiveIdx(shapes.length - 2)
+  }
+
+  // Nombre de formes validees
+  const validatedCount = shapes.filter(s => s.validated && s.points.length >= 3).length
+
+  // Confirmer et passer a l'etape 4
+  const handleConfirm = () => {
+    const validShapes = shapes.filter(s => s.validated && s.points.length >= 3)
+    if (validShapes.length === 0) { alert('Validez au moins un objet.'); return }
 
     const { pixelsPerMm } = calibration
-    const bounds = getBounds(contourPx)
-    const contourMm = contourToMm(contourPx, pixelsPerMm, bounds.x, bounds.y)
-    const boundsMm = getBounds(contourMm)
+
+    // Convertir chaque forme en mm
+    const allContoursMm = validShapes.map(shape => {
+      let contourPx = shape.points
+      if (margin > 0) {
+        const polyMask = polygonToMask(contourPx, w, h)
+        const expanded = dilateMask(polyMask, w, h, margin)
+        const cleaned = cleanMask(expanded, w, h, 1, 1)
+        const extracted = maskToContour(cleaned, w, h, 180)
+        if (extracted.length >= 5) contourPx = simplifyContour(extracted, 2)
+      }
+      return contourPx
+    })
+
+    // Calcul du bounding box global (toutes les formes)
+    const allPointsPx = allContoursMm.flat()
+    const globalBounds = getBounds(allPointsPx)
+    const globalMm = contourToMm(allPointsPx, pixelsPerMm, globalBounds.x, globalBounds.y)
+    const boundsMm = getBounds(globalMm)
     const gridSize = snapToGrid(boundsMm.w, boundsMm.h, GRID_UNIT)
-    const centered = centerInGrid(contourMm, gridSize.w, gridSize.h, GRID_UNIT)
+
+    // Convertir chaque contour en mm et centrer dans la grille
+    const contoursMm = allContoursMm.map(pts => {
+      const mm = contourToMm(pts, pixelsPerMm, globalBounds.x, globalBounds.y)
+      return mm
+    })
+
+    // Centrer toutes les formes ensemble
+    const totalW = gridSize.w * GRID_UNIT
+    const totalH = gridSize.h * GRID_UNIT
+    const ox = (totalW - boundsMm.w) / 2 - boundsMm.x
+    const oy = (totalH - boundsMm.h) / 2 - boundsMm.y
+    const centeredContours = contoursMm.map(pts =>
+      pts.map(p => ({ x: p.x + ox, y: p.y + oy }))
+    )
 
     onContourReady({
-      contourMm: centered,
-      contourPx,
+      contoursMm: centeredContours,
+      contourMm: centeredContours[0], // retro-compatibilite
       gridSize,
       boundsMm,
       mask: null,
@@ -521,7 +626,7 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
 
       <div className="cr-split">
         <div className="cr-split-left">
-          {/* Toolbar icons */}
+          {/* Toolbar outils */}
           <div className="cr-toolbar cr-toolbar-vertical">
             <button className={`cr-tool ${tool === 'add' ? 'active' : ''}`} onClick={() => setTool('add')} title="Ajouter un point">
               <span>+</span> Ajouter
@@ -535,46 +640,72 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
             <button className={`cr-tool ${tool === 'delete' ? 'active' : ''}`} onClick={() => setTool('delete')} title="Supprimer un point">
               <span>&#10005;</span> Supprimer
             </button>
-            <button className="cr-tool" onClick={clearAll} title="Tout effacer">
-              <span>&#8634;</span> Reset
-            </button>
           </div>
 
-          {/* Legend */}
+          {/* Legende */}
           <div className="cr-legend">
-            {tool === 'add' && <p>Cliquez sur la photo pour placer des points autour de l'objet.</p>}
-            {tool === 'move' && <p>Cliquez sur un point et glissez pour le deplacer.</p>}
-            {tool === 'insert' && <p>Cliquez sur une ligne entre deux points pour en inserer un nouveau.</p>}
+            {tool === 'add' && <p>Cliquez pour placer des points autour de l'objet.</p>}
+            {tool === 'move' && <p>Glissez un point pour le deplacer.</p>}
+            {tool === 'insert' && <p>Cliquez sur une ligne pour inserer un point.</p>}
             {tool === 'delete' && <p>Cliquez sur un point pour le supprimer.</p>}
-            <p className="cr-legend-shortcut">Clic droit = supprimer (raccourci)</p>
+            <p className="cr-legend-shortcut">Clic droit = supprimer / Molette = zoom</p>
           </div>
 
-          {vectorPoints.length > 0 && (
-            <div className="cr-info-row">
-              <span className="cr-info-badge">{vectorPoints.length} points</span>
+          {/* Liste des objets */}
+          <div className="cr-shapes-list">
+            <div className="cr-shapes-header">
+              <span>Objets ({shapes.length})</span>
+              <button className="cr-link-btn" onClick={addNewShape}>+ Nouvel objet</button>
+            </div>
+            {shapes.map((shape, idx) => {
+              const color = SHAPE_COLORS[idx % SHAPE_COLORS.length]
+              return (
+                <div
+                  key={shape.id}
+                  className={`cr-shape-item ${idx === activeIdx ? 'active' : ''}`}
+                  onClick={() => selectShape(idx)}
+                >
+                  <span className="cr-shape-dot" style={{ background: color.stroke }} />
+                  <span className="cr-shape-name">
+                    Objet {idx + 1}
+                    <small> ({shape.points.length} pts)</small>
+                  </span>
+                  {shape.validated && <span className="cr-shape-check">&#10003;</span>}
+                  {shapes.length > 1 && (
+                    <button className="cr-shape-del" onClick={(e) => { e.stopPropagation(); deleteShape(idx) }} title="Supprimer cet objet">&#10005;</button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Actions sur la forme active */}
+          {!isActiveValidated && vectorPoints.length >= 3 && (
+            <button className="btn btn-sm btn-primary" onClick={handleValidateShape} style={{ marginTop: '0.4rem', width: '100%' }}>
+              Valider objet {activeIdx + 1}
+            </button>
+          )}
+          {isActiveValidated && (
+            <div className="cr-option cr-margin-option" style={{ marginTop: '0.4rem' }}>
+              <div className="cr-option-success">Objet {activeIdx + 1} valide</div>
+              <button className="cr-link-btn" onClick={handleModifyShape}>Modifier</button>
+              <button className="cr-link-btn" onClick={clearActiveShape} style={{ marginLeft: '0.5rem' }}>Reset</button>
             </div>
           )}
 
-          {validated && (
-            <div className="cr-option cr-margin-option">
-              <div className="cr-option-success">Contour valide</div>
+          {/* Marge globale */}
+          {validatedCount > 0 && (
+            <div className="cr-option" style={{ marginTop: '0.4rem' }}>
               <label>Marge: {margin}px</label>
               <input type="range" min={0} max={30} value={margin} onChange={e => setMargin(Number(e.target.value))} />
-              <p className="cr-option-hint">Espace autour de l'objet dans le module.</p>
-              <button className="cr-link-btn" onClick={handleModify} style={{ marginTop: '0.3rem' }}>Modifier les points</button>
+              <p className="cr-option-hint">Espace autour des objets dans le module.</p>
             </div>
-          )}
-
-          {!validated && vectorPoints.length >= 3 && (
-            <button className="btn btn-sm btn-primary" onClick={handleValidate} style={{ marginTop: '0.5rem' }}>
-              Valider la selection
-            </button>
           )}
 
           <div className="cr-actions" style={{ marginTop: 'auto' }}>
-            <button className="btn btn-secondary" onClick={onBack}>←</button>
-            <button className="btn btn-primary" onClick={handleConfirm} disabled={!validated}>
-              Continuer →
+            <button className="btn btn-secondary" onClick={onBack}>&#8592;</button>
+            <button className="btn btn-primary" onClick={handleConfirm} disabled={validatedCount === 0}>
+              Continuer &#8594;
             </button>
           </div>
         </div>
@@ -604,16 +735,18 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
 }
 
 // ===== Step 4: 3D Preview + Save =====
-function GridfinityModule3D({ contourMm, gridW, gridH, depth }) {
+function GridfinityModule3D({ contoursMm, gridW, gridH, depth }) {
   const totalW = gridW * GRID_UNIT
   const totalH = gridH * GRID_UNIT
-  const s = 0.01 // mm to scene units
-  const baseThick = 3 // mm
-  const cavityDepth = depth * GRID_UNIT * 0.5 // mm
+  const s = 0.01
+  const baseThick = 3
+  const cavityDepth = depth * GRID_UNIT * 0.5
   const totalHeight = baseThick + cavityDepth
 
-  if (contourMm.length < 3) {
-    // Fallback: plain solid block
+  // Filtrer les contours valides
+  const validContours = (contoursMm || []).filter(c => c && c.length >= 3)
+
+  if (validContours.length === 0) {
     return (
       <mesh position={[0, totalHeight * s / 2, 0]}>
         <boxGeometry args={[totalW * s, totalHeight * s, totalH * s]} />
@@ -622,7 +755,7 @@ function GridfinityModule3D({ contourMm, gridW, gridH, depth }) {
     )
   }
 
-  // Full outer rectangle (scene units)
+  // Rectangle exterieur
   const outerShape = new THREE.Shape()
   outerShape.moveTo(0, 0)
   outerShape.lineTo(totalW * s, 0)
@@ -630,60 +763,54 @@ function GridfinityModule3D({ contourMm, gridW, gridH, depth }) {
   outerShape.lineTo(0, totalH * s)
   outerShape.closePath()
 
-  // 1. Full solid base: rectangle extruded to baseThick (no hole)
+  // Base pleine (pas de trous)
   const baseGeom = (
-    <mesh
-      position={[-totalW * s / 2, 0, -totalH * s / 2]}
-      rotation={[-Math.PI / 2, 0, 0]}
-    >
+    <mesh position={[-totalW * s / 2, 0, -totalH * s / 2]} rotation={[-Math.PI / 2, 0, 0]}>
       <extrudeGeometry args={[outerShape, { steps: 1, depth: baseThick * s, bevelEnabled: false }]} />
       <meshStandardMaterial color="#C8B8A4" side={THREE.DoubleSide} />
     </mesh>
   )
 
-  // 2. Upper walls: rectangle with tool contour as hole, extruded to cavityDepth
+  // Murs : rectangle avec TOUS les contours en trous
   const wallShape = outerShape.clone()
-  const holePath = new THREE.Path()
-  holePath.moveTo(contourMm[0].x * s, contourMm[0].y * s)
-  for (let i = 1; i < contourMm.length; i++) {
-    holePath.lineTo(contourMm[i].x * s, contourMm[i].y * s)
-  }
-  holePath.closePath()
-  wallShape.holes.push(holePath)
+  validContours.forEach(contour => {
+    const hole = new THREE.Path()
+    hole.moveTo(contour[0].x * s, contour[0].y * s)
+    for (let i = 1; i < contour.length; i++) {
+      hole.lineTo(contour[i].x * s, contour[i].y * s)
+    }
+    hole.closePath()
+    wallShape.holes.push(hole)
+  })
 
   const wallsGeom = (
-    <mesh
-      position={[-totalW * s / 2, baseThick * s, -totalH * s / 2]}
-      rotation={[-Math.PI / 2, 0, 0]}
-    >
+    <mesh position={[-totalW * s / 2, baseThick * s, -totalH * s / 2]} rotation={[-Math.PI / 2, 0, 0]}>
       <extrudeGeometry args={[wallShape, { steps: 1, depth: cavityDepth * s, bevelEnabled: false }]} />
       <meshStandardMaterial color="#D4C4B0" side={THREE.DoubleSide} />
     </mesh>
   )
 
-  // 3. Colored floor at the bottom of the cavity
-  const toolShape = new THREE.Shape()
-  toolShape.moveTo(contourMm[0].x * s, contourMm[0].y * s)
-  for (let i = 1; i < contourMm.length; i++) {
-    toolShape.lineTo(contourMm[i].x * s, contourMm[i].y * s)
-  }
-  toolShape.closePath()
-
-  const cavityFloor = (
-    <mesh
-      position={[-totalW * s / 2, baseThick * s + 0.001, -totalH * s / 2]}
-      rotation={[-Math.PI / 2, 0, 0]}
-    >
-      <shapeGeometry args={[toolShape]} />
-      <meshStandardMaterial color="#A08060" side={THREE.DoubleSide} />
-    </mesh>
-  )
+  // Fond colore de chaque cavite
+  const cavityFloors = validContours.map((contour, idx) => {
+    const toolShape = new THREE.Shape()
+    toolShape.moveTo(contour[0].x * s, contour[0].y * s)
+    for (let i = 1; i < contour.length; i++) {
+      toolShape.lineTo(contour[i].x * s, contour[i].y * s)
+    }
+    toolShape.closePath()
+    return (
+      <mesh key={idx} position={[-totalW * s / 2, baseThick * s + 0.001, -totalH * s / 2]} rotation={[-Math.PI / 2, 0, 0]}>
+        <shapeGeometry args={[toolShape]} />
+        <meshStandardMaterial color="#A08060" side={THREE.DoubleSide} />
+      </mesh>
+    )
+  })
 
   return (
     <group>
       {baseGeom}
       {wallsGeom}
-      {cavityFloor}
+      {cavityFloors}
     </group>
   )
 }
@@ -693,7 +820,8 @@ function StepPreview({ contourData, onBack, onSave }) {
   const [depth, setDepth] = useState(1)
   const [viewMode, setViewMode] = useState('3d')
 
-  const { contourMm, gridSize, boundsMm } = contourData
+  const { contoursMm, contourMm, gridSize, boundsMm } = contourData
+  const allContours = contoursMm || (contourMm ? [contourMm] : [])
 
   const handleSave = () => {
     if (!name.trim()) return
@@ -708,7 +836,8 @@ function StepPreview({ contourData, onBack, onSave }) {
       color: '#8B6E4E',
       category: 'custom',
       isCustom: true,
-      contour: contourMm,
+      contours: allContours,
+      contour: allContours[0],
       createdAt: new Date().toISOString(),
     }
     addModule(mod)
@@ -774,7 +903,7 @@ function StepPreview({ contourData, onBack, onSave }) {
             >
               <ambientLight intensity={0.6} />
               <directionalLight position={[5, 8, 5]} intensity={0.8} />
-              <GridfinityModule3D contourMm={contourMm} gridW={gridSize.w} gridH={gridSize.h} depth={depth} />
+              <GridfinityModule3D contoursMm={allContours} gridW={gridSize.w} gridH={gridSize.h} depth={depth} />
               <OrbitControls enablePan={false} maxPolarAngle={viewMode === 'top' ? 0.01 : Math.PI / 2} />
             </Canvas>
             <div className="cr-viewport-info">{gridSize.w}x{gridSize.h} Grille — {gridSize.w * GRID_UNIT}mm x {gridSize.h * GRID_UNIT}mm</div>
