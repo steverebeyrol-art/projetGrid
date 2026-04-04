@@ -212,6 +212,7 @@ function StepPaper({ imageData, onCalibrated, onBack }) {
 // ===== Step 3: Select Tool (Vector Points) =====
 function StepSelect({ imageData, calibration, onContourReady, onBack }) {
   const canvasRef = useRef(null)
+  const wrapRef = useRef(null)
   const [vectorPoints, setVectorPoints] = useState([])
   const [tool, setTool] = useState('add') // 'add' | 'move' | 'insert' | 'delete'
   const [dragIdx, setDragIdx] = useState(-1)
@@ -220,17 +221,28 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
   const [margin, setMargin] = useState(5)
   const [validated, setValidated] = useState(false)
 
+  // Zoom & pan
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [isPanning, setIsPanning] = useState(false)
+  const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
+
   const { drawW: w, drawH: h } = imageData
   const POINT_RADIUS = 8
   const HIT_RADIUS = 12
   const SEGMENT_HIT_DIST = 8
 
-  // Convert mouse event to canvas coordinates
+  // Convert mouse event to image coordinates (accounting for zoom+pan)
   const getCanvasXY = (e) => {
-    const rect = canvasRef.current.getBoundingClientRect()
+    const canvas = canvasRef.current
+    const rect = canvas.getBoundingClientRect()
+    // Mouse position in canvas pixel space
+    const canvasX = (e.clientX - rect.left) * (canvas.width / rect.width)
+    const canvasY = (e.clientY - rect.top) * (canvas.height / rect.height)
+    // Reverse the transform: canvas coords → image coords
     return {
-      x: Math.round((e.clientX - rect.left) * (w / rect.width)),
-      y: Math.round((e.clientY - rect.top) * (h / rect.height)),
+      x: Math.round((canvasX - pan.x) / zoom),
+      y: Math.round((canvasY - pan.y) / zoom),
     }
   }
 
@@ -263,13 +275,19 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
     return bestDist <= SEGMENT_HIT_DIST ? { idx: bestIdx, pos: bestPos } : { idx: -1, pos: null }
   }
 
-  // Redraw canvas
+  // Redraw canvas with zoom+pan
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     canvas.width = w
     canvas.height = h
+
+    ctx.save()
+    ctx.translate(pan.x, pan.y)
+    ctx.scale(zoom, zoom)
+
+    // Draw image
     ctx.drawImage(imageData.img, 0, 0, w, h)
 
     if (vectorPoints.length > 0) {
@@ -283,23 +301,24 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
         ctx.fill()
       }
 
-      // Draw outline
-      renderContourOutline(ctx, vectorPoints, '#FFFFFF', 3, vectorPoints.length >= 3)
-      renderContourOutline(ctx, vectorPoints, '#8B6E4E', 1.5, vectorPoints.length >= 3)
+      // Draw outline (scale-independent line width)
+      const lw = 1 / zoom
+      renderContourOutline(ctx, vectorPoints, '#FFFFFF', 3 * lw, vectorPoints.length >= 3)
+      renderContourOutline(ctx, vectorPoints, '#8B6E4E', 1.5 * lw, vectorPoints.length >= 3)
 
-      // Draw points
+      // Draw points (scale-independent size)
+      const pr = POINT_RADIUS / zoom
       for (let i = 0; i < vectorPoints.length; i++) {
         const p = vectorPoints[i]
         ctx.beginPath()
-        ctx.arc(p.x, p.y, POINT_RADIUS, 0, Math.PI * 2)
+        ctx.arc(p.x, p.y, pr, 0, Math.PI * 2)
         ctx.fillStyle = dragIdx === i ? '#8B6E4E' : '#FFFFFF'
         ctx.fill()
         ctx.strokeStyle = '#8B6E4E'
-        ctx.lineWidth = 2
+        ctx.lineWidth = 2 / zoom
         ctx.stroke()
-        // Point number
         ctx.fillStyle = dragIdx === i ? '#FFFFFF' : '#8B6E4E'
-        ctx.font = 'bold 9px sans-serif'
+        ctx.font = `bold ${Math.round(9 / zoom)}px sans-serif`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillText(String(i + 1), p.x, p.y)
@@ -308,22 +327,62 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
       // Draw insert preview on hovered segment
       if (hoverSegment >= 0 && hoverPos && dragIdx < 0) {
         ctx.beginPath()
-        ctx.arc(hoverPos.x, hoverPos.y, 6, 0, Math.PI * 2)
+        ctx.arc(hoverPos.x, hoverPos.y, 6 / zoom, 0, Math.PI * 2)
         ctx.fillStyle = 'rgba(139, 110, 78, 0.5)'
         ctx.fill()
         ctx.strokeStyle = '#8B6E4E'
-        ctx.lineWidth = 1.5
-        ctx.setLineDash([3, 3])
+        ctx.lineWidth = 1.5 / zoom
+        ctx.setLineDash([3 / zoom, 3 / zoom])
         ctx.stroke()
         ctx.setLineDash([])
       }
     }
-  }, [imageData, vectorPoints, w, h, dragIdx, hoverSegment, hoverPos])
+
+    ctx.restore()
+  }, [imageData, vectorPoints, w, h, dragIdx, hoverSegment, hoverPos, zoom, pan])
+
+  // Zoom helpers
+  const zoomIn = () => setZoom(z => Math.min(5, z + 0.5))
+  const zoomOut = () => {
+    setZoom(z => {
+      const next = Math.max(1, z - 0.5)
+      if (next === 1) setPan({ x: 0, y: 0 })
+      return next
+    })
+  }
+  const zoomReset = () => { setZoom(1); setPan({ x: 0, y: 0 }) }
+
+  // Mouse wheel zoom (centered on cursor)
+  const handleWheel = (e) => {
+    e.preventDefault()
+    const delta = e.deltaY > 0 ? -0.25 : 0.25
+    setZoom(z => {
+      const next = Math.max(1, Math.min(5, z + delta))
+      if (next === 1) setPan({ x: 0, y: 0 })
+      return next
+    })
+  }
+
+  // Attach wheel listener with passive:false
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    canvas.addEventListener('wheel', handleWheel, { passive: false })
+    return () => canvas.removeEventListener('wheel', handleWheel)
+  }, [])
 
   // Mouse down: action depends on selected tool
   const handleMouseDown = (e) => {
-    if (validated) return
     e.preventDefault()
+
+    // Middle mouse button = pan
+    if (e.button === 1) {
+      setIsPanning(true)
+      panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y }
+      return
+    }
+
+    if (validated) return
     const { x, y } = getCanvasXY(e)
 
     if (tool === 'add') {
@@ -339,7 +398,7 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
           newPts.splice(idx + 1, 0, pos)
           setVectorPoints(newPts)
           setDragIdx(idx + 1)
-          setTool('move') // switch to move after insert to drag the new point
+          setTool('move')
         }
       }
     } else if (tool === 'delete') {
@@ -350,8 +409,20 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
     }
   }
 
-  // Mouse move: drag point or show insert preview
+  // Mouse move: drag point, pan, or show insert preview
   const handleMouseMove = (e) => {
+    // Panning
+    if (isPanning) {
+      const dx = e.clientX - panStart.current.x
+      const dy = e.clientY - panStart.current.y
+      const canvas = canvasRef.current
+      const rect = canvas.getBoundingClientRect()
+      const scaleX = canvas.width / rect.width
+      const scaleY = canvas.height / rect.height
+      setPan({ x: panStart.current.panX + dx * scaleX, y: panStart.current.panY + dy * scaleY })
+      return
+    }
+
     const { x, y } = getCanvasXY(e)
 
     if (dragIdx >= 0) {
@@ -365,7 +436,6 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
 
     if (validated) return
 
-    // Show insert preview when hovering near a segment in insert mode
     if (tool === 'insert' && vectorPoints.length >= 2) {
       const { idx, pos } = findSegmentAt(x, y)
       if (idx !== hoverSegment) setHoverSegment(idx)
@@ -377,6 +447,7 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
 
   const handleMouseUp = () => {
     setDragIdx(-1)
+    setIsPanning(false)
   }
 
   // Right click always deletes (shortcut)
@@ -509,7 +580,12 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
         </div>
 
         <div className="cr-split-right">
-          <div className="cr-canvas-wrap">
+          <div className="cr-zoom-bar">
+            <button className="cr-zoom-btn" onClick={zoomOut} title="Zoom -">&#8722;</button>
+            <span className="cr-zoom-level" onClick={zoomReset} title="Reinitialiser">{Math.round(zoom * 100)}%</span>
+            <button className="cr-zoom-btn" onClick={zoomIn} title="Zoom +">+</button>
+          </div>
+          <div className="cr-canvas-wrap" ref={wrapRef}>
             <canvas
               ref={canvasRef}
               className="cr-canvas"
@@ -518,7 +594,7 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
               onContextMenu={handleContextMenu}
-              style={{ cursor: cursorForTool[tool] || 'crosshair' }}
+              style={{ cursor: isPanning ? 'grabbing' : (cursorForTool[tool] || 'crosshair') }}
             />
           </div>
         </div>
