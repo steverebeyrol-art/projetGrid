@@ -160,40 +160,55 @@ function StepPaper({ imageData, onCalibrated, onBack }) {
         <div className="cr-step-num">2</div>
         <div>
           <h4>Delimitez la feuille A4</h4>
-          <p>Cliquez sur les 4 coins de la feuille pour calibrer les mesures.</p>
+          <p>Cliquez sur les 4 coins de la feuille.</p>
         </div>
       </div>
 
-      <div className="cr-canvas-wrap">
-        <canvas ref={canvasRef} className="cr-canvas" onClick={handleCanvasClick} style={{ cursor: corners.length < 4 ? 'crosshair' : 'default' }} />
-      </div>
+      <div className="cr-split">
+        <div className="cr-split-left">
+          <div className="cr-info-row">
+            <span className="cr-info-badge">{corners.length}/4 coins</span>
+            {autoCorners && corners.length === 0 && (
+              <button className="cr-link-btn" onClick={useAutoCorners}>Detection auto</button>
+            )}
+            {corners.length > 0 && (
+              <button className="cr-link-btn" onClick={() => setCorners([])}>Recommencer</button>
+            )}
+          </div>
 
-      <div className="cr-info-row">
-        <span className="cr-info-badge">{corners.length}/4 coins</span>
-        {autoCorners && corners.length === 0 && (
-          <button className="cr-link-btn" onClick={useAutoCorners}>Detection auto</button>
-        )}
-        {corners.length > 0 && (
-          <button className="cr-link-btn" onClick={() => setCorners([])}>Recommencer</button>
-        )}
-      </div>
+          {corners.length === 4 && (
+            <div className="cr-calibration-info">
+              {(() => {
+                const calib = calibrateFromCorners(corners)
+                return calib ? (
+                  <p>Echelle: <strong>{calib.pixelsPerMm.toFixed(2)} px/mm</strong><br/>Feuille: {Math.round(calib.shortSidePx / calib.pixelsPerMm)}mm x {Math.round(calib.longSidePx / calib.pixelsPerMm)}mm</p>
+                ) : null
+              })()}
+            </div>
+          )}
 
-      {corners.length === 4 && (
-        <div className="cr-calibration-info">
-          {(() => {
-            const calib = calibrateFromCorners(corners)
-            return calib ? (
-              <p>Echelle: <strong>{calib.pixelsPerMm.toFixed(2)} px/mm</strong> — Feuille detectee: {Math.round(calib.shortSidePx / calib.pixelsPerMm)}mm x {Math.round(calib.longSidePx / calib.pixelsPerMm)}mm</p>
-            ) : null
-          })()}
+          <div className="cr-tips" style={{ marginTop: 'auto' }}>
+            <p className="cr-tips-title">Instructions :</p>
+            <ul>
+              <li>Cliquez sur les 4 coins de la feuille A4</li>
+              <li>L'ordre des coins n'a pas d'importance</li>
+              <li>La feuille sert de reference de mesure</li>
+            </ul>
+          </div>
+
+          <div className="cr-actions">
+            <button className="btn btn-secondary" onClick={onBack}>←</button>
+            <button className="btn btn-primary" onClick={handleConfirm} disabled={corners.length !== 4}>
+              Continuer →
+            </button>
+          </div>
         </div>
-      )}
 
-      <div className="cr-actions">
-        <button className="btn btn-secondary" onClick={onBack}>← Retour</button>
-        <button className="btn btn-primary" onClick={handleConfirm} disabled={corners.length !== 4}>
-          Continuer →
-        </button>
+        <div className="cr-split-right">
+          <div className="cr-canvas-wrap">
+            <canvas ref={canvasRef} className="cr-canvas" onClick={handleCanvasClick} style={{ cursor: corners.length < 4 ? 'crosshair' : 'default' }} />
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -351,95 +366,94 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
         <div className="cr-step-num">3</div>
         <div>
           <h4>Selectionnez l'objet</h4>
-          <p>Utilisez les outils pour detourer votre objet sur la photo.</p>
+          <p>Detourer votre objet avec les outils ci-dessous.</p>
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="cr-toolbar">
-        <button className={`cr-tool ${mode === 'wand' ? 'active' : ''}`} onClick={() => setMode('wand')} title="Baguette magique">
-          <span>✨</span> Baguette
-        </button>
-        <button className={`cr-tool ${mode === 'vector' ? 'active' : ''}`} onClick={() => setMode('vector')} title="Points vectoriels">
-          <span>📐</span> Points
-        </button>
-        <button className={`cr-tool ${mode === 'eraser' ? 'active' : ''}`} onClick={() => setMode('eraser')} title="Gomme">
-          <span>🧹</span> Gomme
-        </button>
-        <div className="cr-tool-sep" />
-        <button className="cr-tool" onClick={clearAll} title="Tout effacer">
-          <span>🗑️</span> Reset
-        </button>
-      </div>
+      <div className="cr-split">
+        <div className="cr-split-left">
+          {/* Toolbar */}
+          <div className="cr-toolbar cr-toolbar-vertical">
+            <button className={`cr-tool ${mode === 'wand' ? 'active' : ''}`} onClick={() => setMode('wand')} title="Baguette magique">
+              <span>✨</span> Baguette
+            </button>
+            <button className={`cr-tool ${mode === 'vector' ? 'active' : ''}`} onClick={() => setMode('vector')} title="Points vectoriels">
+              <span>📐</span> Points
+            </button>
+            <button className={`cr-tool ${mode === 'eraser' ? 'active' : ''}`} onClick={() => setMode('eraser')} title="Gomme">
+              <span>🧹</span> Gomme
+            </button>
+            <button className="cr-tool" onClick={clearAll} title="Tout effacer">
+              <span>🗑️</span> Reset
+            </button>
+          </div>
 
-      {/* Tool options */}
-      <div className="cr-tool-options">
-        {mode === 'wand' && !showContour && (
-          <div className="cr-option">
-            <label>Tolerance: {tolerance}</label>
-            <input type="range" min={10} max={100} value={tolerance} onChange={e => setTolerance(Number(e.target.value))} />
-            <p className="cr-option-hint">Cliquez sur l'objet. Chaque clic ajoute a la selection.</p>
-            {mask && (
-              <button className="btn btn-sm btn-primary" onClick={handleValidateSelection} style={{ marginTop: '0.4rem' }}>
-                ✓ Valider la selection
-              </button>
+          {/* Tool options */}
+          <div className="cr-tool-options">
+            {mode === 'wand' && !showContour && (
+              <div className="cr-option">
+                <label>Tolerance: {tolerance}</label>
+                <input type="range" min={10} max={100} value={tolerance} onChange={e => setTolerance(Number(e.target.value))} />
+                <p className="cr-option-hint">Cliquez sur l'objet. Chaque clic ajoute.</p>
+                {mask && (
+                  <button className="btn btn-sm btn-primary" onClick={handleValidateSelection} style={{ marginTop: '0.4rem' }}>
+                    ✓ Valider
+                  </button>
+                )}
+              </div>
+            )}
+            {mode === 'vector' && !showContour && (
+              <div className="cr-option">
+                <p className="cr-option-hint">Cliquez autour de l'objet. Min 3 points.</p>
+                {vectorPoints.length >= 3 && (
+                  <button className="btn btn-sm btn-primary" onClick={handleValidateSelection} style={{ marginTop: '0.4rem' }}>
+                    ✓ Valider ({vectorPoints.length} pts)
+                  </button>
+                )}
+              </div>
+            )}
+            {mode === 'eraser' && !showContour && (
+              <div className="cr-option">
+                <label>Taille: {brushSize}px</label>
+                <input type="range" min={5} max={50} value={brushSize} onChange={e => setBrushSize(Number(e.target.value))} />
+              </div>
+            )}
+
+            {showContour && (
+              <div className="cr-option cr-margin-option">
+                <div className="cr-option-success">✓ {contourPoints.length} points</div>
+                <label>Marge: {margin}px</label>
+                <input type="range" min={0} max={30} value={margin} onChange={e => setMargin(Number(e.target.value))} />
+                <button className="cr-link-btn" onClick={() => setShowContour(false)} style={{ marginTop: '0.3rem' }}>Modifier la selection</button>
+              </div>
             )}
           </div>
-        )}
-        {mode === 'vector' && !showContour && (
-          <div className="cr-option">
-            <p className="cr-option-hint">Cliquez autour de l'objet pour placer des points. Min 3 points.</p>
-            {vectorPoints.length >= 3 && (
-              <button className="btn btn-sm btn-primary" onClick={handleValidateSelection} style={{ marginTop: '0.4rem' }}>
-                ✓ Valider les {vectorPoints.length} points
-              </button>
-            )}
-          </div>
-        )}
-        {mode === 'eraser' && !showContour && (
-          <div className="cr-option">
-            <label>Taille: {brushSize}px</label>
-            <input type="range" min={5} max={50} value={brushSize} onChange={e => setBrushSize(Number(e.target.value))} />
-            <p className="cr-option-hint">Cliquez/glissez pour effacer des zones de la selection.</p>
-          </div>
-        )}
 
-        {/* Margin slider - shown after validation */}
-        {showContour && (
-          <div className="cr-option cr-margin-option">
-            <div className="cr-option-success">✓ Contour genere ({contourPoints.length} points)</div>
-            <label>Marge autour de l'objet: {margin}px</label>
-            <input type="range" min={0} max={30} value={margin} onChange={e => setMargin(Number(e.target.value))} />
-            <p className="cr-option-hint">Ajustez la marge pour laisser de l'espace autour de l'objet dans le module.</p>
-          </div>
-        )}
-      </div>
-
-      {/* Canvas */}
-      <div className="cr-canvas-wrap">
-        <canvas
-          ref={canvasRef}
-          className="cr-canvas"
-          onClick={handleCanvasClick}
-          onMouseMove={handleMouseMove}
-          style={{ cursor: cursorStyle }}
-        />
-      </div>
-
-      {mask && (
-        <div className="cr-info-row">
-          <span className="cr-info-badge">{showContour ? 'Contour valide' : 'Selection active'}</span>
-          {showContour && (
-            <button className="cr-link-btn" onClick={() => { setShowContour(false) }}>Modifier</button>
+          {mask && (
+            <div className="cr-info-row">
+              <span className="cr-info-badge">{showContour ? 'Contour valide' : 'Selection active'}</span>
+            </div>
           )}
-        </div>
-      )}
 
-      <div className="cr-actions">
-        <button className="btn btn-secondary" onClick={onBack}>← Retour</button>
-        <button className="btn btn-primary" onClick={handleConfirm} disabled={!showContour}>
-          Continuer →
-        </button>
+          <div className="cr-actions" style={{ marginTop: 'auto' }}>
+            <button className="btn btn-secondary" onClick={onBack}>←</button>
+            <button className="btn btn-primary" onClick={handleConfirm} disabled={!showContour}>
+              Continuer →
+            </button>
+          </div>
+        </div>
+
+        <div className="cr-split-right">
+          <div className="cr-canvas-wrap">
+            <canvas
+              ref={canvasRef}
+              className="cr-canvas"
+              onClick={handleCanvasClick}
+              onMouseMove={handleMouseMove}
+              style={{ cursor: cursorStyle }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -591,65 +605,67 @@ function StepPreview({ contourData, onBack, onSave }) {
         </div>
       </div>
 
-      <div className="cr-viewport">
-        <div className="cr-vtabs">
-          <button className={`cr-vtab ${viewMode === '3d' ? 'active' : ''}`} onClick={() => setViewMode('3d')}>Vue 3D</button>
-          <button className={`cr-vtab ${viewMode === 'top' ? 'active' : ''}`} onClick={() => setViewMode('top')}>Vue dessus</button>
-        </div>
-        <Canvas
-          camera={{ position: viewMode === 'top' ? [0, 5, 0] : [3, 3, 3], fov: 40 }}
-          style={{ background: '#F5F1EC', borderRadius: '0 0 12px 12px', height: '260px' }}
-        >
-          <ambientLight intensity={0.6} />
-          <directionalLight position={[5, 8, 5]} intensity={0.8} />
-          <GridfinityModule3D contourMm={contourMm} gridW={gridSize.w} gridH={gridSize.h} depth={depth} />
-          <OrbitControls enablePan={false} maxPolarAngle={viewMode === 'top' ? 0.01 : Math.PI / 2} />
-        </Canvas>
-        <div className="cr-viewport-info">{gridSize.w}x{gridSize.h} Grille — {gridSize.w * GRID_UNIT}mm x {gridSize.h * GRID_UNIT}mm</div>
-      </div>
+      <div className="cr-split">
+        <div className="cr-split-left">
+          <div className="cr-form">
+            <div className="cr-field">
+              <label>Nom du module</label>
+              <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Pince, Casque..." />
+            </div>
 
-      <div className="cr-form">
-        <div className="cr-field">
-          <label>Nom du module</label>
-          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Pince, Casque, Tournevis..." />
-        </div>
+            <div className="cr-field">
+              <label>Profondeur</label>
+              <div className="cr-depth-btns">
+                {[1, 2, 3, 4].map(d => (
+                  <button key={d} className={`cr-depth-btn ${depth === d ? 'active' : ''}`} onClick={() => setDepth(d)}>
+                    {d}u
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        <div className="cr-field">
-          <label>Profondeur</label>
-          <div className="cr-depth-btns">
-            {[1, 2, 3, 4].map(d => (
-              <button key={d} className={`cr-depth-btn ${depth === d ? 'active' : ''}`} onClick={() => setDepth(d)}>
-                {d}u
-              </button>
-            ))}
+            <div className="cr-info-grid" style={{ flexDirection: 'column' }}>
+              <div className="cr-info-cell">
+                <span className="cr-info-label">Taille reelle</span>
+                <span className="cr-info-val">{Math.round(boundsMm.w)}x{Math.round(boundsMm.h)}mm</span>
+              </div>
+              <div className="cr-info-cell">
+                <span className="cr-info-label">Grille</span>
+                <span className="cr-info-val">{gridSize.w}x{gridSize.h} unites</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="cr-actions" style={{ marginTop: 'auto' }}>
+            <button className="btn btn-secondary" onClick={onBack}>←</button>
+            <button className="btn btn-primary" onClick={handleSave} disabled={!name.trim()}>Sauvegarder</button>
           </div>
         </div>
 
-        <div className="cr-info-grid">
-          <div className="cr-info-cell">
-            <span className="cr-info-label">Taille reelle</span>
-            <span className="cr-info-val">{Math.round(boundsMm.w)}x{Math.round(boundsMm.h)}mm</span>
-          </div>
-          <div className="cr-info-cell">
-            <span className="cr-info-label">Grille</span>
-            <span className="cr-info-val">{gridSize.w}x{gridSize.h} unites</span>
-          </div>
-          <div className="cr-info-cell">
-            <span className="cr-info-label">Points</span>
-            <span className="cr-info-val">{contourMm.length}</span>
+        <div className="cr-split-right">
+          <div className="cr-viewport">
+            <div className="cr-vtabs">
+              <button className={`cr-vtab ${viewMode === '3d' ? 'active' : ''}`} onClick={() => setViewMode('3d')}>Vue 3D</button>
+              <button className={`cr-vtab ${viewMode === 'top' ? 'active' : ''}`} onClick={() => setViewMode('top')}>Vue dessus</button>
+            </div>
+            <Canvas
+              camera={{ position: viewMode === 'top' ? [0, 5, 0] : [3, 3, 3], fov: 40 }}
+              style={{ background: '#F5F1EC', borderRadius: '0 0 12px 12px', height: '100%', minHeight: '320px' }}
+            >
+              <ambientLight intensity={0.6} />
+              <directionalLight position={[5, 8, 5]} intensity={0.8} />
+              <GridfinityModule3D contourMm={contourMm} gridW={gridSize.w} gridH={gridSize.h} depth={depth} />
+              <OrbitControls enablePan={false} maxPolarAngle={viewMode === 'top' ? 0.01 : Math.PI / 2} />
+            </Canvas>
+            <div className="cr-viewport-info">{gridSize.w}x{gridSize.h} Grille — {gridSize.w * GRID_UNIT}mm x {gridSize.h * GRID_UNIT}mm</div>
           </div>
         </div>
-      </div>
-
-      <div className="cr-actions">
-        <button className="btn btn-secondary" onClick={onBack}>← Retour</button>
-        <button className="btn btn-primary" onClick={handleSave} disabled={!name.trim()}>Sauvegarder</button>
       </div>
     </div>
   )
 }
 
-// ===== Step 5: Done =====
+/// ===== Step 5: Done =====
 function StepDone({ moduleData, onClose, onReset }) {
   return (
     <div className="cr-done">

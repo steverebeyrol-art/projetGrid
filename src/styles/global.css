@@ -1925,7 +1925,7 @@ body {
 .creator-open-btn { border-style: dashed !important; }
 .creator-open-btn:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
 
-.modal-creator { max-width: 620px; max-height: 90vh; overflow-y: auto; }
+.modal-creator { max-width: 95vw; width: 1050px; max-height: 92vh; overflow-y: auto; }
 .modal-creator-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border); }
 .modal-creator-header h3 { margin: 0; font-size: 1.1rem; }
 .modal-close-btn { background: none; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer; padding: 0.25rem 0.4rem; border-radius: var(--radius-sm); transition: all var(--transition); }
@@ -1945,6 +1945,20 @@ body {
 .cr-prog-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.4s ease; }
 
 /* Step layout */
+/* Split layout: options left, canvas/3D right */
+.cr-split { display: flex; gap: 1rem; min-height: 380px; }
+.cr-split-left { flex: 0 0 260px; display: flex; flex-direction: column; }
+.cr-split-right { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cr-split-right .cr-canvas-wrap { flex: 1; margin-bottom: 0; min-height: 0; }
+.cr-split-right .cr-canvas { width: 100%; height: 100%; object-fit: contain; }
+.cr-split-right .cr-viewport { flex: 1; display: flex; flex-direction: column; }
+.cr-split-right .cr-viewport canvas { flex: 1; }
+@media (max-width: 700px) {
+  .cr-split { flex-direction: column; min-height: auto; }
+  .cr-split-left { flex: none; }
+  .modal-creator { width: auto; max-width: 95vw; }
+}
+
 .cr-step {}
 .cr-step-head { display: flex; gap: 0.7rem; align-items: flex-start; margin-bottom: 1rem; }
 .cr-step-num { width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem; flex-shrink: 0; }
@@ -1985,6 +1999,7 @@ body {
 
 /* Toolbar */
 .cr-toolbar { display: flex; gap: 0.3rem; margin-bottom: 0.5rem; background: var(--bg-input); padding: 0.3rem; border-radius: var(--radius); }
+.cr-toolbar-vertical { flex-wrap: wrap; }
 .cr-tool { display: flex; align-items: center; gap: 0.3rem; padding: 0.35rem 0.6rem; border: 1px solid transparent; border-radius: var(--radius-sm); background: none; color: var(--text-secondary); font-size: 0.72rem; font-family: inherit; cursor: pointer; transition: all var(--transition); }
 .cr-tool:hover { background: var(--bg-card); border-color: var(--border); }
 .cr-tool.active { background: var(--accent); border-color: var(--accent); color: white; }
