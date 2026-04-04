@@ -449,55 +449,107 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
 function GridfinityModule3D({ contourMm, gridW, gridH, depth }) {
   const totalW = gridW * GRID_UNIT
   const totalH = gridH * GRID_UNIT
-  const s = 0.01
-  const wallT = 1.2
-  const baseH = depth * GRID_UNIT * 0.5
+  const s = 0.01 // mm to scene units
+  const wallThick = 2 // mm
+  const baseThick = 3 // mm - bottom plate thickness
+  const cavityDepth = depth * GRID_UNIT * 0.5 // mm
 
-  // Grid walls
-  const walls = []
-  for (let i = 0; i <= gridW; i++) {
-    walls.push(
-      <mesh key={`v${i}`} position={[i * GRID_UNIT * s - totalW * s / 2, baseH * s / 2, 0]}>
-        <boxGeometry args={[wallT * s, baseH * s, totalH * s]} />
-        <meshStandardMaterial color="#B8A08A" />
-      </mesh>
-    )
-  }
-  for (let j = 0; j <= gridH; j++) {
-    walls.push(
-      <mesh key={`h${j}`} position={[0, baseH * s / 2, j * GRID_UNIT * s - totalH * s / 2]}>
-        <boxGeometry args={[totalW * s, baseH * s, wallT * s]} />
-        <meshStandardMaterial color="#B8A08A" />
-      </mesh>
-    )
-  }
+  // 1. Bottom plate (thin base)
+  const basePlate = (
+    <mesh position={[0, baseThick * s / 2, 0]}>
+      <boxGeometry args={[totalW * s, baseThick * s, totalH * s]} />
+      <meshStandardMaterial color="#C8B8A4" />
+    </mesh>
+  )
 
-  // Tool cavity shape
-  let cavityMesh = null
+  // 2. Outer walls (rectangular frame around the module)
+  const outerWalls = [
+    // Front wall
+    <mesh key="wf" position={[0, (baseThick + cavityDepth / 2) * s, -totalH * s / 2 + wallThick * s / 2]}>
+      <boxGeometry args={[totalW * s, cavityDepth * s, wallThick * s]} />
+      <meshStandardMaterial color="#B8A898" />
+    </mesh>,
+    // Back wall
+    <mesh key="wb" position={[0, (baseThick + cavityDepth / 2) * s, totalH * s / 2 - wallThick * s / 2]}>
+      <boxGeometry args={[totalW * s, cavityDepth * s, wallThick * s]} />
+      <meshStandardMaterial color="#B8A898" />
+    </mesh>,
+    // Left wall
+    <mesh key="wl" position={[-totalW * s / 2 + wallThick * s / 2, (baseThick + cavityDepth / 2) * s, 0]}>
+      <boxGeometry args={[wallThick * s, cavityDepth * s, totalH * s]} />
+      <meshStandardMaterial color="#B8A898" />
+    </mesh>,
+    // Right wall
+    <mesh key="wr" position={[totalW * s / 2 - wallThick * s / 2, (baseThick + cavityDepth / 2) * s, 0]}>
+      <boxGeometry args={[wallThick * s, cavityDepth * s, totalH * s]} />
+      <meshStandardMaterial color="#B8A898" />
+    </mesh>,
+  ]
+
+  // 3. The "raised floor" around the tool cavity
+  // Create a shape for the full interior, with the tool contour as a hole
+  let floorWithCavity = null
   if (contourMm.length >= 3) {
-    const shape = new THREE.Shape()
-    shape.moveTo(contourMm[0].x, contourMm[0].y)
-    for (let i = 1; i < contourMm.length; i++) {
-      shape.lineTo(contourMm[i].x, contourMm[i].y)
-    }
-    shape.closePath()
+    // Outer rectangle (interior of walls)
+    const floorShape = new THREE.Shape()
+    const inset = wallThick
+    floorShape.moveTo(inset, inset)
+    floorShape.lineTo(totalW - inset, inset)
+    floorShape.lineTo(totalW - inset, totalH - inset)
+    floorShape.lineTo(inset, totalH - inset)
+    floorShape.closePath()
 
-    cavityMesh = (
-      <mesh position={[-totalW * s / 2, baseH * s + 1 * s, -totalH * s / 2]} rotation={[-Math.PI / 2, 0, 0]}>
-        <extrudeGeometry args={[shape, { steps: 1, depth: baseH * s * 0.8, bevelEnabled: false }]} />
-        <meshStandardMaterial color="#C8956C" side={THREE.DoubleSide} />
+    // Tool contour as a hole
+    const holePath = new THREE.Path()
+    holePath.moveTo(contourMm[0].x, contourMm[0].y)
+    for (let i = 1; i < contourMm.length; i++) {
+      holePath.lineTo(contourMm[i].x, contourMm[i].y)
+    }
+    holePath.closePath()
+    floorShape.holes.push(holePath)
+
+    floorWithCavity = (
+      <mesh
+        position={[-totalW * s / 2, baseThick * s, -totalH * s / 2]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <extrudeGeometry args={[floorShape, {
+          steps: 1,
+          depth: cavityDepth * s,
+          bevelEnabled: false,
+        }]} />
+        <meshStandardMaterial color="#D4C4B0" side={THREE.DoubleSide} />
+      </mesh>
+    )
+  }
+
+  // 4. Tool shape shadow at bottom of cavity (colored)
+  let cavityBottom = null
+  if (contourMm.length >= 3) {
+    const toolShape = new THREE.Shape()
+    toolShape.moveTo(contourMm[0].x, contourMm[0].y)
+    for (let i = 1; i < contourMm.length; i++) {
+      toolShape.lineTo(contourMm[i].x, contourMm[i].y)
+    }
+    toolShape.closePath()
+
+    cavityBottom = (
+      <mesh
+        position={[-totalW * s / 2, baseThick * s + 0.001, -totalH * s / 2]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <shapeGeometry args={[toolShape]} />
+        <meshStandardMaterial color="#A08060" side={THREE.DoubleSide} />
       </mesh>
     )
   }
 
   return (
     <group>
-      <mesh position={[0, 1 * s, 0]}>
-        <boxGeometry args={[totalW * s, 2 * s, totalH * s]} />
-        <meshStandardMaterial color="#D4C4B0" />
-      </mesh>
-      {walls}
-      {cavityMesh}
+      {basePlate}
+      {outerWalls}
+      {floorWithCavity}
+      {cavityBottom}
     </group>
   )
 }
