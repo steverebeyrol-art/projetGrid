@@ -6,9 +6,6 @@ import {
   loadAndPrepareImage,
   autoDetectPaperCorners,
   calibrateFromCorners,
-  magicWandSelect,
-  addToMask,
-  subtractFromMask,
   cleanMask,
   dilateMask,
   maskToContour,
@@ -18,9 +15,7 @@ import {
   getBounds,
   snapToGrid,
   centerInGrid,
-  renderMaskOverlay,
   renderContourOutline,
-  renderControlPoints,
   renderPaperCorners,
 } from '../utils/contourDetection'
 import { addModule, getCategories, addCategory } from '../utils/moduleStore'
@@ -214,230 +209,279 @@ function StepPaper({ imageData, onCalibrated, onBack }) {
   )
 }
 
-// ===== Step 3: Select Tool (Magic Wand / Vector Points) =====
+// ===== Step 3: Select Tool (Vector Points) =====
 function StepSelect({ imageData, calibration, onContourReady, onBack }) {
   const canvasRef = useRef(null)
-  const [mode, setMode] = useState('wand') // 'wand' | 'vector' | 'eraser'
-  const [mask, setMask] = useState(null)
   const [vectorPoints, setVectorPoints] = useState([])
-  const [tolerance, setTolerance] = useState(45)
-  const [brushSize, setBrushSize] = useState(15)
-  const [margin, setMargin] = useState(5) // margin in pixels to expand selection
+  const [dragIdx, setDragIdx] = useState(-1) // index of point being dragged
+  const [hoverSegment, setHoverSegment] = useState(-1) // segment index for insert preview
+  const [hoverPos, setHoverPos] = useState(null) // position on hovered segment
+  const [margin, setMargin] = useState(5)
+  const [validated, setValidated] = useState(false)
 
   const { drawW: w, drawH: h } = imageData
+  const POINT_RADIUS = 8
+  const HIT_RADIUS = 12
+  const SEGMENT_HIT_DIST = 8
 
-  const [showContour, setShowContour] = useState(false)
-  const [contourPoints, setContourPoints] = useState([])
+  // Convert mouse event to canvas coordinates
+  const getCanvasXY = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect()
+    return {
+      x: Math.round((e.clientX - rect.left) * (w / rect.width)),
+      y: Math.round((e.clientY - rect.top) * (h / rect.height)),
+    }
+  }
 
-  // Redraw
+  // Find closest point index within hit radius
+  const findPointAt = (px, py) => {
+    for (let i = 0; i < vectorPoints.length; i++) {
+      const dx = vectorPoints[i].x - px, dy = vectorPoints[i].y - py
+      if (dx * dx + dy * dy <= HIT_RADIUS * HIT_RADIUS) return i
+    }
+    return -1
+  }
+
+  // Find closest segment and project point onto it
+  const findSegmentAt = (px, py) => {
+    if (vectorPoints.length < 2) return { idx: -1, pos: null }
+    let bestDist = Infinity, bestIdx = -1, bestPos = null
+    const n = vectorPoints.length
+    for (let i = 0; i < n; i++) {
+      const a = vectorPoints[i], b = vectorPoints[(i + 1) % n]
+      const abx = b.x - a.x, aby = b.y - a.y
+      const len2 = abx * abx + aby * aby
+      if (len2 === 0) continue
+      let t = ((px - a.x) * abx + (py - a.y) * aby) / len2
+      t = Math.max(0.05, Math.min(0.95, t)) // clamp away from endpoints
+      const projX = a.x + t * abx, projY = a.y + t * aby
+      const dx = px - projX, dy = py - projY
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      if (dist < bestDist) { bestDist = dist; bestIdx = i; bestPos = { x: Math.round(projX), y: Math.round(projY) } }
+    }
+    return bestDist <= SEGMENT_HIT_DIST ? { idx: bestIdx, pos: bestPos } : { idx: -1, pos: null }
+  }
+
+  // Redraw canvas
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     canvas.width = w
     canvas.height = h
-
-    // Draw image
     ctx.drawImage(imageData.img, 0, 0, w, h)
 
-    // Draw mask overlay (colored zone showing selection)
-    if (mask) {
-      // If validated, show dilated mask
-      const displayMask = showContour && margin > 0 ? dilateMask(mask, w, h, margin) : mask
-      renderMaskOverlay(ctx, displayMask, w, h, 139, 110, 78, 80)
-    }
-
-    // Show contour outline after validation
-    if (showContour && contourPoints.length > 2) {
-      renderContourOutline(ctx, contourPoints, '#FFFFFF', 3)
-      renderContourOutline(ctx, contourPoints, '#8B6E4E', 1.5)
-    }
-
-    // Draw vector points
-    if (mode === 'vector' && vectorPoints.length > 0) {
-      renderContourOutline(ctx, vectorPoints, '#8B6E4E', 2, vectorPoints.length >= 3)
-      renderControlPoints(ctx, vectorPoints)
-    }
-  }, [imageData, mask, vectorPoints, mode, w, h, showContour, contourPoints, margin])
-
-  const handleCanvasClick = (e) => {
-    const rect = canvasRef.current.getBoundingClientRect()
-    const scaleX = w / rect.width
-    const scaleY = h / rect.height
-    const x = Math.round((e.clientX - rect.left) * scaleX)
-    const y = Math.round((e.clientY - rect.top) * scaleY)
-
-    if (mode === 'wand') {
-      const newMask = mask
-        ? addToMask(imageData.ctx, w, h, mask, x, y, tolerance)
-        : magicWandSelect(imageData.ctx, w, h, x, y, tolerance)
-      setMask(newMask)
-    } else if (mode === 'eraser') {
-      if (mask) {
-        setMask(subtractFromMask(mask, w, h, x, y, brushSize))
+    if (vectorPoints.length > 0) {
+      // Draw filled polygon with semi-transparent overlay
+      if (vectorPoints.length >= 3) {
+        ctx.beginPath()
+        ctx.moveTo(vectorPoints[0].x, vectorPoints[0].y)
+        for (let i = 1; i < vectorPoints.length; i++) ctx.lineTo(vectorPoints[i].x, vectorPoints[i].y)
+        ctx.closePath()
+        ctx.fillStyle = 'rgba(139, 110, 78, 0.15)'
+        ctx.fill()
       }
-    } else if (mode === 'vector') {
-      setVectorPoints(prev => [...prev, { x, y }])
+
+      // Draw outline
+      renderContourOutline(ctx, vectorPoints, '#FFFFFF', 3, vectorPoints.length >= 3)
+      renderContourOutline(ctx, vectorPoints, '#8B6E4E', 1.5, vectorPoints.length >= 3)
+
+      // Draw points
+      for (let i = 0; i < vectorPoints.length; i++) {
+        const p = vectorPoints[i]
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, POINT_RADIUS, 0, Math.PI * 2)
+        ctx.fillStyle = dragIdx === i ? '#8B6E4E' : '#FFFFFF'
+        ctx.fill()
+        ctx.strokeStyle = '#8B6E4E'
+        ctx.lineWidth = 2
+        ctx.stroke()
+        // Point number
+        ctx.fillStyle = dragIdx === i ? '#FFFFFF' : '#8B6E4E'
+        ctx.font = 'bold 9px sans-serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(String(i + 1), p.x, p.y)
+      }
+
+      // Draw insert preview on hovered segment
+      if (hoverSegment >= 0 && hoverPos && dragIdx < 0) {
+        ctx.beginPath()
+        ctx.arc(hoverPos.x, hoverPos.y, 6, 0, Math.PI * 2)
+        ctx.fillStyle = 'rgba(139, 110, 78, 0.5)'
+        ctx.fill()
+        ctx.strokeStyle = '#8B6E4E'
+        ctx.lineWidth = 1.5
+        ctx.setLineDash([3, 3])
+        ctx.stroke()
+        ctx.setLineDash([])
+      }
+    }
+  }, [imageData, vectorPoints, w, h, dragIdx, hoverSegment, hoverPos])
+
+  // Mouse down: start drag or add point
+  const handleMouseDown = (e) => {
+    if (validated) return
+    const { x, y } = getCanvasXY(e)
+
+    // Check if clicking an existing point → start drag
+    const ptIdx = findPointAt(x, y)
+    if (ptIdx >= 0) {
+      setDragIdx(ptIdx)
+      return
+    }
+
+    // Check if clicking on a segment → insert point
+    if (vectorPoints.length >= 2) {
+      const { idx, pos } = findSegmentAt(x, y)
+      if (idx >= 0 && pos) {
+        const newPts = [...vectorPoints]
+        newPts.splice(idx + 1, 0, pos)
+        setVectorPoints(newPts)
+        setDragIdx(idx + 1) // start dragging the new point immediately
+        return
+      }
+    }
+
+    // Otherwise add a new point at the end
+    setVectorPoints(prev => [...prev, { x, y }])
+  }
+
+  // Mouse move: drag point or show segment hover
+  const handleMouseMove = (e) => {
+    const { x, y } = getCanvasXY(e)
+
+    if (dragIdx >= 0) {
+      // Dragging a point
+      setVectorPoints(prev => {
+        const pts = [...prev]
+        pts[dragIdx] = { x: Math.max(0, Math.min(w, x)), y: Math.max(0, Math.min(h, y)) }
+        return pts
+      })
+      return
+    }
+
+    if (validated) return
+
+    // Show insert preview when hovering near a segment
+    if (vectorPoints.length >= 2) {
+      const { idx, pos } = findSegmentAt(x, y)
+      if (idx !== hoverSegment) setHoverSegment(idx)
+      if (pos !== hoverPos) setHoverPos(pos)
     }
   }
 
-  const handleMouseMove = (e) => {
-    if (mode !== 'eraser' || !e.buttons) return
-    const rect = canvasRef.current.getBoundingClientRect()
-    const scaleX = w / rect.width
-    const scaleY = h / rect.height
-    const x = Math.round((e.clientX - rect.left) * scaleX)
-    const y = Math.round((e.clientY - rect.top) * scaleY)
-    if (mask) setMask(subtractFromMask(mask, w, h, x, y, brushSize))
+  // Mouse up: stop dragging
+  const handleMouseUp = () => {
+    setDragIdx(-1)
   }
 
-  const applyVectorPoints = () => {
-    if (vectorPoints.length < 3) return
-    const polyMask = polygonToMask(vectorPoints, w, h)
-    setMask(polyMask)
-    setMode('wand')
+  // Right click: delete point
+  const handleContextMenu = (e) => {
+    e.preventDefault()
+    if (validated) return
+    const { x, y } = getCanvasXY(e)
+    const ptIdx = findPointAt(x, y)
+    if (ptIdx >= 0) {
+      setVectorPoints(prev => prev.filter((_, i) => i !== ptIdx))
+    }
   }
 
   const clearAll = () => {
-    setMask(null)
     setVectorPoints([])
-    setShowContour(false)
-    setContourPoints([])
+    setValidated(false)
   }
 
-  // Generate contour from current mask + margin
-  const generateContour = (currentMask) => {
-    if (!currentMask) return []
-    // Apply margin (dilate)
-    const expanded = margin > 0 ? dilateMask(currentMask, w, h, margin) : currentMask
-    const cleaned = cleanMask(expanded, w, h, 1, 1)
-    const contourPx = maskToContour(cleaned, w, h, 180)
-    if (contourPx.length < 5) return []
-    return simplifyContour(contourPx, 2)
+  const handleValidate = () => {
+    if (vectorPoints.length < 3) { alert('Minimum 3 points requis.'); return }
+    setValidated(true)
   }
 
-  const handleValidateSelection = () => {
-    let finalMask = mask
-    if (!finalMask && vectorPoints.length >= 3) {
-      finalMask = polygonToMask(vectorPoints, w, h)
-      setMask(finalMask)
-    }
-    if (!finalMask) { alert('Selectionnez d\'abord l\'objet.'); return }
-
-    const pts = generateContour(finalMask)
-    if (pts.length < 5) { alert('Contour trop petit. Ajoutez plus de selection.'); return }
-    setContourPoints(pts)
-    setShowContour(true)
+  const handleModify = () => {
+    setValidated(false)
   }
-
-  // Regenerate contour when margin changes (if already validated)
-  useEffect(() => {
-    if (showContour && mask) {
-      const pts = generateContour(mask)
-      setContourPoints(pts)
-    }
-  }, [margin])
 
   const handleConfirm = () => {
-    if (contourPoints.length < 5) { alert('Validez d\'abord la selection.'); return }
+    if (vectorPoints.length < 3) { alert('Minimum 3 points requis.'); return }
 
-    // Convert to mm
+    // Use vector points directly as contour (with optional margin via dilation)
+    let contourPx = vectorPoints
+    if (margin > 0) {
+      // Create mask from polygon, dilate, extract contour
+      const polyMask = polygonToMask(vectorPoints, w, h)
+      const expanded = dilateMask(polyMask, w, h, margin)
+      const cleaned = cleanMask(expanded, w, h, 1, 1)
+      const extracted = maskToContour(cleaned, w, h, 180)
+      if (extracted.length >= 5) {
+        contourPx = simplifyContour(extracted, 2)
+      }
+    }
+
     const { pixelsPerMm } = calibration
-    const bounds = getBounds(contourPoints)
-    const contourMm = contourToMm(contourPoints, pixelsPerMm, bounds.x, bounds.y)
+    const bounds = getBounds(contourPx)
+    const contourMm = contourToMm(contourPx, pixelsPerMm, bounds.x, bounds.y)
     const boundsMm = getBounds(contourMm)
     const gridSize = snapToGrid(boundsMm.w, boundsMm.h, GRID_UNIT)
     const centered = centerInGrid(contourMm, gridSize.w, gridSize.h, GRID_UNIT)
 
     onContourReady({
       contourMm: centered,
-      contourPx: contourPoints,
+      contourPx,
       gridSize,
       boundsMm,
-      mask,
+      mask: null,
     })
   }
-
-  const cursorStyle = mode === 'wand' ? 'crosshair' : mode === 'eraser' ? 'cell' : 'crosshair'
 
   return (
     <div className="cr-step">
       <div className="cr-step-head">
         <div className="cr-step-num">3</div>
         <div>
-          <h4>Selectionnez l'objet</h4>
-          <p>Detourer votre objet avec les outils ci-dessous.</p>
+          <h4>Detourer l'objet</h4>
+          <p>Placez des points autour de votre objet.</p>
         </div>
       </div>
 
       <div className="cr-split">
         <div className="cr-split-left">
-          {/* Toolbar */}
-          <div className="cr-toolbar cr-toolbar-vertical">
-            <button className={`cr-tool ${mode === 'wand' ? 'active' : ''}`} onClick={() => setMode('wand')} title="Baguette magique">
-              <span>✨</span> Baguette
-            </button>
-            <button className={`cr-tool ${mode === 'vector' ? 'active' : ''}`} onClick={() => setMode('vector')} title="Points vectoriels">
-              <span>📐</span> Points
-            </button>
-            <button className={`cr-tool ${mode === 'eraser' ? 'active' : ''}`} onClick={() => setMode('eraser')} title="Gomme">
-              <span>🧹</span> Gomme
-            </button>
-            <button className="cr-tool" onClick={clearAll} title="Tout effacer">
-              <span>🗑️</span> Reset
-            </button>
-          </div>
-
-          {/* Tool options */}
           <div className="cr-tool-options">
-            {mode === 'wand' && !showContour && (
-              <div className="cr-option">
-                <label>Tolerance: {tolerance}</label>
-                <input type="range" min={10} max={100} value={tolerance} onChange={e => setTolerance(Number(e.target.value))} />
-                <p className="cr-option-hint">Cliquez sur l'objet. Chaque clic ajoute.</p>
-                {mask && (
-                  <button className="btn btn-sm btn-primary" onClick={handleValidateSelection} style={{ marginTop: '0.4rem' }}>
-                    ✓ Valider
-                  </button>
-                )}
-              </div>
-            )}
-            {mode === 'vector' && !showContour && (
-              <div className="cr-option">
-                <p className="cr-option-hint">Cliquez autour de l'objet. Min 3 points.</p>
-                {vectorPoints.length >= 3 && (
-                  <button className="btn btn-sm btn-primary" onClick={handleValidateSelection} style={{ marginTop: '0.4rem' }}>
-                    ✓ Valider ({vectorPoints.length} pts)
-                  </button>
-                )}
-              </div>
-            )}
-            {mode === 'eraser' && !showContour && (
-              <div className="cr-option">
-                <label>Taille: {brushSize}px</label>
-                <input type="range" min={5} max={50} value={brushSize} onChange={e => setBrushSize(Number(e.target.value))} />
+            <div className="cr-option">
+              <p className="cr-option-hint">
+                <strong>Clic gauche</strong> : ajouter un point<br />
+                <strong>Glisser</strong> : deplacer un point<br />
+                <strong>Clic sur ligne</strong> : inserer un point<br />
+                <strong>Clic droit</strong> : supprimer un point
+              </p>
+            </div>
+
+            {vectorPoints.length > 0 && (
+              <div className="cr-info-row">
+                <span className="cr-info-badge">{vectorPoints.length} points</span>
+                <button className="cr-link-btn" onClick={clearAll}>Reset</button>
               </div>
             )}
 
-            {showContour && (
+            {validated && (
               <div className="cr-option cr-margin-option">
-                <div className="cr-option-success">✓ {contourPoints.length} points</div>
+                <div className="cr-option-success">Contour valide</div>
                 <label>Marge: {margin}px</label>
                 <input type="range" min={0} max={30} value={margin} onChange={e => setMargin(Number(e.target.value))} />
-                <button className="cr-link-btn" onClick={() => setShowContour(false)} style={{ marginTop: '0.3rem' }}>Modifier la selection</button>
+                <p className="cr-option-hint">Espace autour de l'objet dans le module.</p>
+                <button className="cr-link-btn" onClick={handleModify} style={{ marginTop: '0.3rem' }}>Modifier les points</button>
               </div>
             )}
-          </div>
 
-          {mask && (
-            <div className="cr-info-row">
-              <span className="cr-info-badge">{showContour ? 'Contour valide' : 'Selection active'}</span>
-            </div>
-          )}
+            {!validated && vectorPoints.length >= 3 && (
+              <button className="btn btn-sm btn-primary" onClick={handleValidate} style={{ marginTop: '0.5rem' }}>
+                Valider la selection
+              </button>
+            )}
+          </div>
 
           <div className="cr-actions" style={{ marginTop: 'auto' }}>
             <button className="btn btn-secondary" onClick={onBack}>←</button>
-            <button className="btn btn-primary" onClick={handleConfirm} disabled={!showContour}>
+            <button className="btn btn-primary" onClick={handleConfirm} disabled={!validated}>
               Continuer →
             </button>
           </div>
@@ -448,9 +492,12 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
             <canvas
               ref={canvasRef}
               className="cr-canvas"
-              onClick={handleCanvasClick}
+              onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
-              style={{ cursor: cursorStyle }}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onContextMenu={handleContextMenu}
+              style={{ cursor: dragIdx >= 0 ? 'grabbing' : 'crosshair' }}
             />
           </div>
         </div>
