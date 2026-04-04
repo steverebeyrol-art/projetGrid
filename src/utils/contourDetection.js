@@ -241,51 +241,67 @@ export function cleanMask(mask, w, h, dilateRadius = 2, erodeRadius = 2) {
 
 /**
  * Extract the outer contour from a binary mask
+ * Uses border pixel extraction + ordering for robustness
  * Returns array of {x, y} points
  */
 export function maskToContour(mask, w, h) {
-  // Find start point
-  let startX = -1, startY = -1
-  for (let y = 0; y < h && startX === -1; y++) {
-    for (let x = 0; x < w; x++) {
-      if (mask[y * w + x]) { startX = x; startY = y; break }
+  // Find all border pixels (mask=1 with at least one neighbor mask=0)
+  const borderPixels = []
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      if (!mask[y * w + x]) continue
+      // Check 4-neighbors
+      if (!mask[(y - 1) * w + x] || !mask[(y + 1) * w + x] ||
+          !mask[y * w + (x - 1)] || !mask[y * w + (x + 1)]) {
+        borderPixels.push({ x, y })
+      }
     }
   }
-  if (startX === -1) return []
 
-  // Moore neighbor tracing
-  const contour = []
-  const dirs = [[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]]
-  let x = startX, y = startY, dir = 7
-  const maxSteps = w * h * 2
-  let steps = 0
-  const seen = new Set()
+  if (borderPixels.length < 3) return borderPixels
 
-  do {
-    const key = `${x},${y}`
-    if (!seen.has(key)) {
-      contour.push({ x, y })
-      seen.add(key)
-    }
+  // Order border pixels by walking along the border
+  // Start from the topmost-leftmost border pixel
+  const ordered = []
+  const used = new Set()
 
-    let found = false
-    const startDir = (dir + 5) % 8
+  // Find start: topmost, then leftmost
+  let start = borderPixels[0]
+  for (const p of borderPixels) {
+    if (p.y < start.y || (p.y === start.y && p.x < start.x)) start = p
+  }
 
-    for (let i = 0; i < 8; i++) {
-      const d = (startDir + i) % 8
-      const nx = x + dirs[d][0]
-      const ny = y + dirs[d][1]
+  // Build a lookup for fast neighbor search
+  const borderSet = new Set(borderPixels.map(p => `${p.x},${p.y}`))
 
-      if (nx >= 0 && nx < w && ny >= 0 && ny < h && mask[ny * w + nx]) {
-        x = nx; y = ny; dir = d; found = true; break
+  let current = start
+  const maxIter = borderPixels.length + 10
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    const key = `${current.x},${current.y}`
+    if (used.has(key)) break
+    ordered.push(current)
+    used.add(key)
+
+    // Find nearest unused border neighbor (8-connected)
+    let best = null
+    let bestDist = Infinity
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        if (dx === 0 && dy === 0) continue
+        const nk = `${current.x + dx},${current.y + dy}`
+        if (borderSet.has(nk) && !used.has(nk)) {
+          const d = Math.abs(dx) + Math.abs(dy)
+          if (d < bestDist) { bestDist = d; best = { x: current.x + dx, y: current.y + dy } }
+        }
       }
     }
 
-    if (!found) break
-    steps++
-  } while ((x !== startX || y !== startY) && steps < maxSteps)
+    if (!best) break
+    current = best
+  }
 
-  return contour
+  return ordered
 }
 
 /**

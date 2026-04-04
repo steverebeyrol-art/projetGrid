@@ -209,6 +209,8 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
 
   const { drawW: w, drawH: h } = imageData
 
+  const [showContour, setShowContour] = useState(false)
+
   // Redraw
   useEffect(() => {
     const canvas = canvasRef.current
@@ -220,15 +222,18 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
     // Draw image
     ctx.drawImage(imageData.img, 0, 0, w, h)
 
-    // Draw mask overlay
+    // Draw mask overlay (colored zone showing selection)
     if (mask) {
       renderMaskOverlay(ctx, mask, w, h, 139, 110, 78, 90)
-      // Draw contour outline
-      const contour = maskToContour(mask, w, h)
-      if (contour.length > 10) {
-        const simplified = simplifyContour(contour, 2)
-        renderContourOutline(ctx, simplified, '#FFFFFF', 2.5)
-        renderContourOutline(ctx, simplified, '#8B6E4E', 1.5)
+
+      // Show contour outline only after validation
+      if (showContour) {
+        const contour = maskToContour(mask, w, h)
+        if (contour.length > 5) {
+          const simplified = simplifyContour(contour, 2)
+          renderContourOutline(ctx, simplified, '#FFFFFF', 2.5)
+          renderContourOutline(ctx, simplified, '#8B6E4E', 1.5)
+        }
       }
     }
 
@@ -237,7 +242,7 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
       renderContourOutline(ctx, vectorPoints, '#8B6E4E', 2, vectorPoints.length >= 3)
       renderControlPoints(ctx, vectorPoints)
     }
-  }, [imageData, mask, vectorPoints, mode, w, h])
+  }, [imageData, mask, vectorPoints, mode, w, h, showContour])
 
   const handleCanvasClick = (e) => {
     const rect = canvasRef.current.getBoundingClientRect()
@@ -280,13 +285,21 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
   const clearAll = () => {
     setMask(null)
     setVectorPoints([])
+    setShowContour(false)
+  }
+
+  const handleValidateSelection = () => {
+    let finalMask = mask
+    if (!finalMask && vectorPoints.length >= 3) {
+      finalMask = polygonToMask(vectorPoints, w, h)
+      setMask(finalMask)
+    }
+    if (!finalMask) { alert('Selectionnez d\'abord l\'objet.'); return }
+    setShowContour(true)
   }
 
   const handleConfirm = () => {
     let finalMask = mask
-    if (!finalMask && vectorPoints.length >= 3) {
-      finalMask = polygonToMask(vectorPoints, w, h)
-    }
     if (!finalMask) { alert('Selectionnez d\'abord l\'objet.'); return }
 
     // Clean up mask
@@ -294,12 +307,11 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
 
     // Extract contour
     const contourPx = maskToContour(cleaned, w, h)
-    if (contourPx.length < 10) { alert('Contour trop petit. Reessayez.'); return }
+    if (contourPx.length < 5) { alert('Contour trop petit. Reessayez avec plus de clics.'); return }
     const simplified = simplifyContour(contourPx, 3)
 
     // Convert to mm
     const { pixelsPerMm } = calibration
-    // Origin = mask bounding box top-left
     const bounds = getBounds(simplified)
     const contourMm = contourToMm(simplified, pixelsPerMm, bounds.x, bounds.y)
     const boundsMm = getBounds(contourMm)
@@ -351,15 +363,26 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
             <label>Tolerance: {tolerance}</label>
             <input type="range" min={10} max={100} value={tolerance} onChange={e => setTolerance(Number(e.target.value))} />
             <p className="cr-option-hint">Cliquez sur l'objet. Chaque clic ajoute a la selection.</p>
+            {mask && !showContour && (
+              <button className="btn btn-sm btn-primary" onClick={handleValidateSelection} style={{ marginTop: '0.4rem' }}>
+                ✓ Valider la selection
+              </button>
+            )}
+            {showContour && (
+              <p className="cr-option-hint" style={{ color: 'var(--accent)', fontWeight: 600 }}>Contour genere ! Cliquez "Continuer" pour passer a l'apercu 3D.</p>
+            )}
           </div>
         )}
         {mode === 'vector' && (
           <div className="cr-option">
             <p className="cr-option-hint">Cliquez autour de l'objet pour placer des points. Min 3 points.</p>
-            {vectorPoints.length >= 3 && (
-              <button className="btn btn-sm btn-secondary" onClick={applyVectorPoints}>
-                Appliquer les {vectorPoints.length} points
+            {vectorPoints.length >= 3 && !showContour && (
+              <button className="btn btn-sm btn-primary" onClick={() => { applyVectorPoints(); setTimeout(() => setShowContour(true), 100) }} style={{ marginTop: '0.4rem' }}>
+                ✓ Valider les {vectorPoints.length} points
               </button>
+            )}
+            {showContour && (
+              <p className="cr-option-hint" style={{ color: 'var(--accent)', fontWeight: 600 }}>Contour genere ! Cliquez "Continuer" pour passer a l'apercu 3D.</p>
             )}
           </div>
         )}
@@ -385,13 +408,16 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
 
       {mask && (
         <div className="cr-info-row">
-          <span className="cr-info-badge">Selection active</span>
+          <span className="cr-info-badge">{showContour ? 'Contour valide' : 'Selection active'}</span>
+          {showContour && (
+            <button className="cr-link-btn" onClick={() => { setShowContour(false) }}>Modifier</button>
+          )}
         </div>
       )}
 
       <div className="cr-actions">
         <button className="btn btn-secondary" onClick={onBack}>← Retour</button>
-        <button className="btn btn-primary" onClick={handleConfirm} disabled={!mask && vectorPoints.length < 3}>
+        <button className="btn btn-primary" onClick={handleConfirm} disabled={!showContour}>
           Continuer →
         </button>
       </div>
