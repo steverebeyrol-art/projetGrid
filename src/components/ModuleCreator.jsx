@@ -213,9 +213,10 @@ function StepPaper({ imageData, onCalibrated, onBack }) {
 function StepSelect({ imageData, calibration, onContourReady, onBack }) {
   const canvasRef = useRef(null)
   const [vectorPoints, setVectorPoints] = useState([])
-  const [dragIdx, setDragIdx] = useState(-1) // index of point being dragged
-  const [hoverSegment, setHoverSegment] = useState(-1) // segment index for insert preview
-  const [hoverPos, setHoverPos] = useState(null) // position on hovered segment
+  const [tool, setTool] = useState('add') // 'add' | 'move' | 'insert' | 'delete'
+  const [dragIdx, setDragIdx] = useState(-1)
+  const [hoverSegment, setHoverSegment] = useState(-1)
+  const [hoverPos, setHoverPos] = useState(null)
   const [margin, setMargin] = useState(5)
   const [validated, setValidated] = useState(false)
 
@@ -319,40 +320,41 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
     }
   }, [imageData, vectorPoints, w, h, dragIdx, hoverSegment, hoverPos])
 
-  // Mouse down: start drag or add point
+  // Mouse down: action depends on selected tool
   const handleMouseDown = (e) => {
     if (validated) return
+    e.preventDefault()
     const { x, y } = getCanvasXY(e)
 
-    // Check if clicking an existing point → start drag
-    const ptIdx = findPointAt(x, y)
-    if (ptIdx >= 0) {
-      setDragIdx(ptIdx)
-      return
-    }
-
-    // Check if clicking on a segment → insert point
-    if (vectorPoints.length >= 2) {
-      const { idx, pos } = findSegmentAt(x, y)
-      if (idx >= 0 && pos) {
-        const newPts = [...vectorPoints]
-        newPts.splice(idx + 1, 0, pos)
-        setVectorPoints(newPts)
-        setDragIdx(idx + 1) // start dragging the new point immediately
-        return
+    if (tool === 'add') {
+      setVectorPoints(prev => [...prev, { x, y }])
+    } else if (tool === 'move') {
+      const ptIdx = findPointAt(x, y)
+      if (ptIdx >= 0) setDragIdx(ptIdx)
+    } else if (tool === 'insert') {
+      if (vectorPoints.length >= 2) {
+        const { idx, pos } = findSegmentAt(x, y)
+        if (idx >= 0 && pos) {
+          const newPts = [...vectorPoints]
+          newPts.splice(idx + 1, 0, pos)
+          setVectorPoints(newPts)
+          setDragIdx(idx + 1)
+          setTool('move') // switch to move after insert to drag the new point
+        }
+      }
+    } else if (tool === 'delete') {
+      const ptIdx = findPointAt(x, y)
+      if (ptIdx >= 0) {
+        setVectorPoints(prev => prev.filter((_, i) => i !== ptIdx))
       }
     }
-
-    // Otherwise add a new point at the end
-    setVectorPoints(prev => [...prev, { x, y }])
   }
 
-  // Mouse move: drag point or show segment hover
+  // Mouse move: drag point or show insert preview
   const handleMouseMove = (e) => {
     const { x, y } = getCanvasXY(e)
 
     if (dragIdx >= 0) {
-      // Dragging a point
       setVectorPoints(prev => {
         const pts = [...prev]
         pts[dragIdx] = { x: Math.max(0, Math.min(w, x)), y: Math.max(0, Math.min(h, y)) }
@@ -363,20 +365,21 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
 
     if (validated) return
 
-    // Show insert preview when hovering near a segment
-    if (vectorPoints.length >= 2) {
+    // Show insert preview when hovering near a segment in insert mode
+    if (tool === 'insert' && vectorPoints.length >= 2) {
       const { idx, pos } = findSegmentAt(x, y)
       if (idx !== hoverSegment) setHoverSegment(idx)
       if (pos !== hoverPos) setHoverPos(pos)
+    } else {
+      if (hoverSegment >= 0) { setHoverSegment(-1); setHoverPos(null) }
     }
   }
 
-  // Mouse up: stop dragging
   const handleMouseUp = () => {
     setDragIdx(-1)
   }
 
-  // Right click: delete point
+  // Right click always deletes (shortcut)
   const handleContextMenu = (e) => {
     e.preventDefault()
     if (validated) return
@@ -386,6 +389,8 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
       setVectorPoints(prev => prev.filter((_, i) => i !== ptIdx))
     }
   }
+
+  const cursorForTool = { add: 'crosshair', move: dragIdx >= 0 ? 'grabbing' : 'grab', insert: 'copy', delete: 'pointer' }
 
   const clearAll = () => {
     setVectorPoints([])
@@ -445,39 +450,55 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
 
       <div className="cr-split">
         <div className="cr-split-left">
-          <div className="cr-tool-options">
-            <div className="cr-option">
-              <p className="cr-option-hint">
-                <strong>Clic gauche</strong> : ajouter un point<br />
-                <strong>Glisser</strong> : deplacer un point<br />
-                <strong>Clic sur ligne</strong> : inserer un point<br />
-                <strong>Clic droit</strong> : supprimer un point
-              </p>
-            </div>
-
-            {vectorPoints.length > 0 && (
-              <div className="cr-info-row">
-                <span className="cr-info-badge">{vectorPoints.length} points</span>
-                <button className="cr-link-btn" onClick={clearAll}>Reset</button>
-              </div>
-            )}
-
-            {validated && (
-              <div className="cr-option cr-margin-option">
-                <div className="cr-option-success">Contour valide</div>
-                <label>Marge: {margin}px</label>
-                <input type="range" min={0} max={30} value={margin} onChange={e => setMargin(Number(e.target.value))} />
-                <p className="cr-option-hint">Espace autour de l'objet dans le module.</p>
-                <button className="cr-link-btn" onClick={handleModify} style={{ marginTop: '0.3rem' }}>Modifier les points</button>
-              </div>
-            )}
-
-            {!validated && vectorPoints.length >= 3 && (
-              <button className="btn btn-sm btn-primary" onClick={handleValidate} style={{ marginTop: '0.5rem' }}>
-                Valider la selection
-              </button>
-            )}
+          {/* Toolbar icons */}
+          <div className="cr-toolbar cr-toolbar-vertical">
+            <button className={`cr-tool ${tool === 'add' ? 'active' : ''}`} onClick={() => setTool('add')} title="Ajouter un point">
+              <span>+</span> Ajouter
+            </button>
+            <button className={`cr-tool ${tool === 'move' ? 'active' : ''}`} onClick={() => setTool('move')} title="Deplacer un point">
+              <span>&#9995;</span> Deplacer
+            </button>
+            <button className={`cr-tool ${tool === 'insert' ? 'active' : ''}`} onClick={() => setTool('insert')} title="Inserer sur une ligne">
+              <span>&#10010;</span> Inserer
+            </button>
+            <button className={`cr-tool ${tool === 'delete' ? 'active' : ''}`} onClick={() => setTool('delete')} title="Supprimer un point">
+              <span>&#10005;</span> Supprimer
+            </button>
+            <button className="cr-tool" onClick={clearAll} title="Tout effacer">
+              <span>&#8634;</span> Reset
+            </button>
           </div>
+
+          {/* Legend */}
+          <div className="cr-legend">
+            {tool === 'add' && <p>Cliquez sur la photo pour placer des points autour de l'objet.</p>}
+            {tool === 'move' && <p>Cliquez sur un point et glissez pour le deplacer.</p>}
+            {tool === 'insert' && <p>Cliquez sur une ligne entre deux points pour en inserer un nouveau.</p>}
+            {tool === 'delete' && <p>Cliquez sur un point pour le supprimer.</p>}
+            <p className="cr-legend-shortcut">Clic droit = supprimer (raccourci)</p>
+          </div>
+
+          {vectorPoints.length > 0 && (
+            <div className="cr-info-row">
+              <span className="cr-info-badge">{vectorPoints.length} points</span>
+            </div>
+          )}
+
+          {validated && (
+            <div className="cr-option cr-margin-option">
+              <div className="cr-option-success">Contour valide</div>
+              <label>Marge: {margin}px</label>
+              <input type="range" min={0} max={30} value={margin} onChange={e => setMargin(Number(e.target.value))} />
+              <p className="cr-option-hint">Espace autour de l'objet dans le module.</p>
+              <button className="cr-link-btn" onClick={handleModify} style={{ marginTop: '0.3rem' }}>Modifier les points</button>
+            </div>
+          )}
+
+          {!validated && vectorPoints.length >= 3 && (
+            <button className="btn btn-sm btn-primary" onClick={handleValidate} style={{ marginTop: '0.5rem' }}>
+              Valider la selection
+            </button>
+          )}
 
           <div className="cr-actions" style={{ marginTop: 'auto' }}>
             <button className="btn btn-secondary" onClick={onBack}>←</button>
@@ -497,7 +518,7 @@ function StepSelect({ imageData, calibration, onContourReady, onBack }) {
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
               onContextMenu={handleContextMenu}
-              style={{ cursor: dragIdx >= 0 ? 'grabbing' : 'crosshair' }}
+              style={{ cursor: cursorForTool[tool] || 'crosshair' }}
             />
           </div>
         </div>

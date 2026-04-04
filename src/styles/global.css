@@ -2012,6 +2012,9 @@ body {
 .cr-option input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); cursor: pointer; }
 .cr-option-hint { font-size: 0.68rem; color: var(--text-muted); margin: 0; }
 .cr-option-success { font-size: 0.78rem; font-weight: 600; color: #22c55e; margin-bottom: 0.3rem; }
+.cr-legend { margin-top: 0.5rem; padding: 0.5rem 0.6rem; background: var(--bg-input); border-radius: var(--radius-sm); }
+.cr-legend p { margin: 0; font-size: 0.72rem; color: var(--text-secondary); line-height: 1.5; }
+.cr-legend-shortcut { margin-top: 0.3rem !important; font-size: 0.65rem !important; color: var(--text-muted) !important; font-style: italic; }
 .cr-margin-option { background: var(--bg-input); padding: 0.6rem; border-radius: var(--radius-sm); }
 
 /* Viewport 3D */
