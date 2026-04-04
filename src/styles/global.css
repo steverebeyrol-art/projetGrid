@@ -1048,6 +1048,20 @@ body {
   color: var(--text-muted);
 }
 
+.module-fav-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 0.1rem 0.2rem;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: color var(--transition);
+}
+.module-fav-btn:hover { color: #e8a830; }
+.module-fav-btn.is-fav { color: #e8a830; }
+
 /* Properties Panel */
 .prop-module-header {
   display: flex;

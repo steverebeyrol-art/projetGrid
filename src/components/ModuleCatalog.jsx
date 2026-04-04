@@ -1,22 +1,38 @@
 import { useState } from 'react'
-import { getAllCategories } from '../utils/moduleStore'
+import { getAllCategories, getModuleById } from '../utils/moduleStore'
+import { getFavorites, toggleFavorite, isFavorite } from '../utils/auth'
 
 export default function ModuleCatalog({ activeModule, onSelectModule }) {
   const CATEGORIES = getAllCategories()
-  const [openCategory, setOpenCategory] = useState(CATEGORIES[0]?.id)
+  const [openCategory, setOpenCategory] = useState('favorites')
   const [search, setSearch] = useState('')
+  const [, forceUpdate] = useState(0) // pour re-render apres toggle favori
 
   const isSearching = search.trim().length > 0
 
-  const filteredCategories = CATEGORIES.map(cat => ({
+  // Construire la categorie Favoris
+  const favIds = getFavorites()
+  const favModules = favIds.map(id => getModuleById(id)).filter(Boolean)
+  const favCategory = { id: 'favorites', name: 'Favoris', icon: '⭐', modules: favModules }
+
+  // Toutes les categories avec Favoris en premier
+  const allCategories = [favCategory, ...CATEGORIES]
+
+  const filteredCategories = allCategories.map(cat => ({
     ...cat,
     modules: cat.modules.filter(m =>
       m.name.toLowerCase().includes(search.toLowerCase()) ||
-      m.description.toLowerCase().includes(search.toLowerCase())
+      (m.description || '').toLowerCase().includes(search.toLowerCase())
     )
   })).filter(cat => cat.modules.length > 0)
 
   const totalResults = filteredCategories.reduce((a, c) => a + c.modules.length, 0)
+
+  const handleToggleFav = (e, modId) => {
+    e.stopPropagation()
+    toggleFavorite(modId)
+    forceUpdate(n => n + 1)
+  }
 
   return (
     <div className="d-card catalog-section">
@@ -73,6 +89,13 @@ export default function ModuleCatalog({ activeModule, onSelectModule }) {
                         <div className="module-card-name">{mod.name}</div>
                         <div className="module-card-size">{mod.w}x{mod.d}x{mod.h}u</div>
                       </div>
+                      <button
+                        className={`module-fav-btn ${isFavorite(mod.id) ? 'is-fav' : ''}`}
+                        onClick={(e) => handleToggleFav(e, mod.id)}
+                        title={isFavorite(mod.id) ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                      >
+                        {isFavorite(mod.id) ? '★' : '☆'}
+                      </button>
                     </div>
                   ))}
                 </div>
