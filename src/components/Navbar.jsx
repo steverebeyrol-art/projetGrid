@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from './AuthContext'
 import { getAllCategories } from '../utils/moduleStore'
@@ -17,7 +17,6 @@ function getSearchResults(query) {
   const q = query.toLowerCase()
   const results = []
 
-  // Search pages
   const pages = [
     { name: 'Designer', desc: 'Configurateur 3D', path: '/designer', icon: '🎨' },
     { name: 'Tarifs', desc: 'Plans et abonnements', path: '/pricing', icon: '💰' },
@@ -29,7 +28,6 @@ function getSearchResults(query) {
     }
   })
 
-  // Search categories & modules
   const cats = getAllCategories()
   cats.forEach(cat => {
     if (cat.name.toLowerCase().includes(q)) {
@@ -49,7 +47,10 @@ export default function Navbar() {
   const { t, i18n } = useTranslation()
   const { user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [showModules, setShowModules] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [mobileModules, setMobileModules] = useState(false)
   const [navSearch, setNavSearch] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const searchRef = useRef(null)
@@ -59,6 +60,13 @@ export default function Navbar() {
   const searchResults = getSearchResults(navSearch)
   const showResults = searchFocused && navSearch.trim().length > 0
 
+  // Close mobile menu on navigation
+  useEffect(() => {
+    setMobileOpen(false)
+    setMobileModules(false)
+  }, [location.pathname])
+
+  // Close mobile menu on outside click
   useEffect(() => {
     function handleClick(e) {
       if (searchRef.current && !searchRef.current.contains(e.target)) {
@@ -68,6 +76,12 @@ export default function Navbar() {
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [mobileOpen])
 
   function handleResultClick(path) {
     navigate(path)
@@ -83,7 +97,8 @@ export default function Navbar() {
         <span className="logo-sub">by OMMEdesign</span>
       </Link>
 
-      <div className="nav-search-wrapper" ref={searchRef}>
+      {/* Search bar - desktop */}
+      <div className="nav-search-wrapper nav-desktop-only" ref={searchRef}>
         <span className="nav-search-icon">&#x1F50D;</span>
         <input
           type="text"
@@ -114,7 +129,8 @@ export default function Navbar() {
         )}
       </div>
 
-      <div className="nav-links">
+      {/* Desktop nav links */}
+      <div className="nav-links nav-desktop-only">
         <Link to="/designer" className="nav-link">{t('nav.designer')}</Link>
 
         <div
@@ -153,6 +169,83 @@ export default function Navbar() {
           {i18n.language === 'fr' ? 'FR' : 'EN'}
         </button>
       </div>
+
+      {/* Mobile hamburger button */}
+      <button
+        className={`nav-hamburger ${mobileOpen ? 'open' : ''}`}
+        onClick={() => setMobileOpen(!mobileOpen)}
+        aria-label="Menu"
+      >
+        <span /><span /><span />
+      </button>
+
+      {/* Mobile menu overlay */}
+      {mobileOpen && (
+        <div className="nav-mobile-overlay" onClick={() => setMobileOpen(false)}>
+          <div className="nav-mobile-menu" onClick={e => e.stopPropagation()}>
+            {/* Mobile search */}
+            <div className="nav-mobile-search">
+              <span className="nav-search-icon">&#x1F50D;</span>
+              <input
+                type="text"
+                placeholder={t('nav.search')}
+                value={navSearch}
+                onChange={e => setNavSearch(e.target.value)}
+              />
+              {navSearch && <button className="nav-search-clear" onClick={() => setNavSearch('')}>&#10005;</button>}
+            </div>
+
+            {/* Mobile nav links */}
+            <div className="nav-mobile-links">
+              <Link to="/designer" className="nav-mobile-link">
+                <span>🎨</span> {t('nav.designer')}
+              </Link>
+
+              <button className="nav-mobile-link" onClick={() => setMobileModules(!mobileModules)}>
+                <span>📦</span> {t('nav.modules')}
+                <span className={`nav-mobile-chevron ${mobileModules ? 'open' : ''}`}>&#9662;</span>
+              </button>
+              {mobileModules && (
+                <div className="nav-mobile-sub">
+                  {getModuleLinks().map(m => (
+                    <Link key={m.slug} to={`/modules/${m.slug}`} className="nav-mobile-sub-link">
+                      {m.icon} {m.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+
+              <Link to="/pricing" className="nav-mobile-link">
+                <span>💰</span> {t('nav.pricing')}
+              </Link>
+
+              {user ? (
+                <>
+                  <Link to="/account" className="nav-mobile-link">
+                    <span>👤</span> {t('nav.account')}
+                  </Link>
+                  {user.isAdmin && (
+                    <Link to="/admin" className="nav-mobile-link">
+                      <span>⚙️</span> Admin
+                    </Link>
+                  )}
+                </>
+              ) : (
+                <Link to="/login" className="nav-mobile-link nav-mobile-link-cta">
+                  {t('nav.login')}
+                </Link>
+              )}
+            </div>
+
+            {/* Mobile footer: lang toggle */}
+            <div className="nav-mobile-footer">
+              <button className="nav-lang-btn" onClick={toggleLang}>
+                {i18n.language === 'fr' ? '🇫🇷 Francais' : '🇬🇧 English'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </nav>
   )
 }
