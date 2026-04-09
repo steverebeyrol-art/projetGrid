@@ -1452,6 +1452,21 @@ body {
 
 .nav-avatar:hover { background: var(--accent-hover); }
 
+.nav-lang-btn {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-family: inherit;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+  letter-spacing: 0.03em;
+}
+.nav-lang-btn:hover { border-color: var(--accent); color: var(--accent); }
+
 .nav-link-pro {
   color: var(--warning) !important;
   font-weight: 600;

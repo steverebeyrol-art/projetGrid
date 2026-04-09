@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from './AuthContext'
 import { getAllCategories } from '../utils/moduleStore'
 
@@ -45,12 +46,15 @@ function getSearchResults(query) {
 }
 
 export default function Navbar() {
+  const { t, i18n } = useTranslation()
   const { user } = useAuth()
   const navigate = useNavigate()
   const [showModules, setShowModules] = useState(false)
   const [navSearch, setNavSearch] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const searchRef = useRef(null)
+
+  const toggleLang = () => i18n.changeLanguage(i18n.language === 'fr' ? 'en' : 'fr')
 
   const searchResults = getSearchResults(navSearch)
   const showResults = searchFocused && navSearch.trim().length > 0
@@ -84,7 +88,7 @@ export default function Navbar() {
         <input
           type="text"
           className="nav-search-input"
-          placeholder="Rechercher..."
+          placeholder={t('nav.search')}
           value={navSearch}
           onChange={e => setNavSearch(e.target.value)}
           onFocus={() => setSearchFocused(true)}
@@ -101,24 +105,24 @@ export default function Navbar() {
                   <span className="nav-search-result-name">{r.name}</span>
                   {r.desc && <span className="nav-search-result-desc">{r.desc}</span>}
                 </div>
-                <span className="nav-search-result-type">{r.type === 'page' ? 'Page' : r.type === 'category' ? 'Categorie' : 'Module'}</span>
+                <span className="nav-search-result-type">{r.type === 'page' ? 'Page' : r.type === 'category' ? t('nav.categories') : 'Module'}</span>
               </button>
             )) : (
-              <div className="nav-search-empty">Aucun resultat</div>
+              <div className="nav-search-empty">{t('nav.noResults')}</div>
             )}
           </div>
         )}
       </div>
 
       <div className="nav-links">
-        <Link to="/designer" className="nav-link">Designer</Link>
+        <Link to="/designer" className="nav-link">{t('nav.designer')}</Link>
 
         <div
           className="nav-dropdown"
           onMouseEnter={() => setShowModules(true)}
           onMouseLeave={() => setShowModules(false)}
         >
-          <span className="nav-link nav-link-trigger">Modules</span>
+          <span className="nav-link nav-link-trigger">{t('nav.modules')}</span>
           {showModules && (
             <div className="nav-dropdown-menu">
               {getModuleLinks().map(m => (
@@ -131,19 +135,23 @@ export default function Navbar() {
           )}
         </div>
 
-        <Link to="/pricing" className="nav-link">Tarifs</Link>
+        <Link to="/pricing" className="nav-link">{t('nav.pricing')}</Link>
 
         {user ? (
           <>
-            <Link to="/account" className="nav-link">Mon compte</Link>
+            <Link to="/account" className="nav-link">{t('nav.account')}</Link>
             {user.isAdmin && <Link to="/admin" className="nav-link nav-link-pro">Pro</Link>}
             <Link to="/account" className="nav-avatar" title={user.name}>
               {user.name?.[0]?.toUpperCase() || '?'}
             </Link>
           </>
         ) : (
-          <Link to="/login" className="btn btn-primary btn-sm">Connexion</Link>
+          <Link to="/login" className="btn btn-primary btn-sm">{t('nav.login')}</Link>
         )}
+
+        <button className="nav-lang-btn" onClick={toggleLang} title="FR / EN">
+          {i18n.language === 'fr' ? 'FR' : 'EN'}
+        </button>
       </div>
     </nav>
   )
